@@ -17,24 +17,18 @@ import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidBoxTest
 import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidBytecodeShapeTest
 import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidIrBoxTest
 import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidSyntheticPropertyDescriptorTest
-import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightClassLoadingTest
-import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightClassSanityTest
-import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightFacadeClassTest
-import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightScriptLoadingTest
+import org.jetbrains.kotlin.asJava.classes.*
 import org.jetbrains.kotlin.checkers.*
 import org.jetbrains.kotlin.copyright.AbstractUpdateKotlinCopyrightTest
-import org.jetbrains.kotlin.findUsages.AbstractFindUsagesTest
-import org.jetbrains.kotlin.findUsages.AbstractFindUsagesWithDisableComponentSearchTest
-import org.jetbrains.kotlin.findUsages.AbstractKotlinFindUsagesWithLibraryTest
+import org.jetbrains.kotlin.findUsages.*
 import org.jetbrains.kotlin.fir.plugin.AbstractFirAllOpenDiagnosticTest
 import org.jetbrains.kotlin.formatter.AbstractFormatterTest
 import org.jetbrains.kotlin.formatter.AbstractTypingIndentationTestBase
-import org.jetbrains.kotlin.generators.tests.generator.TestGroup
-import org.jetbrains.kotlin.generators.tests.generator.muteExtraSuffix
-import org.jetbrains.kotlin.generators.tests.generator.testGroupSuite
-import org.jetbrains.kotlin.generators.util.KT_OR_KTS
-import org.jetbrains.kotlin.generators.util.KT_OR_KTS_WITHOUT_DOTS_IN_NAME
-import org.jetbrains.kotlin.generators.util.KT_WITHOUT_DOTS_IN_NAME
+import org.jetbrains.kotlin.generators.TestGroup
+import org.jetbrains.kotlin.generators.impl.generateTestGroupSuite
+import org.jetbrains.kotlin.generators.util.TestGeneratorUtil.KT_OR_KTS
+import org.jetbrains.kotlin.generators.util.TestGeneratorUtil.KT_OR_KTS_WITHOUT_DOTS_IN_NAME
+import org.jetbrains.kotlin.generators.util.TestGeneratorUtil.KT_WITHOUT_DOTS_IN_NAME
 import org.jetbrains.kotlin.idea.AbstractExpressionSelectionTest
 import org.jetbrains.kotlin.idea.AbstractSmartSelectionTest
 import org.jetbrains.kotlin.idea.actions.AbstractGotoTestOrCodeActionTest
@@ -51,13 +45,12 @@ import org.jetbrains.kotlin.idea.codeInsight.moveUpDown.AbstractMoveStatementTes
 import org.jetbrains.kotlin.idea.codeInsight.postfix.AbstractPostfixTemplateProviderTest
 import org.jetbrains.kotlin.idea.codeInsight.surroundWith.AbstractSurroundWithTest
 import org.jetbrains.kotlin.idea.codeInsight.unwrap.AbstractUnwrapRemoveTest
+import org.jetbrains.kotlin.idea.completion.AbstractHighLevelJvmBasicCompletionTest
 import org.jetbrains.kotlin.idea.completion.test.*
-import org.jetbrains.kotlin.idea.completion.test.handlers.AbstractBasicCompletionHandlerTest
-import org.jetbrains.kotlin.idea.completion.test.handlers.AbstractCompletionCharFilterTest
-import org.jetbrains.kotlin.idea.completion.test.handlers.AbstractKeywordCompletionHandlerTest
-import org.jetbrains.kotlin.idea.completion.test.handlers.AbstractSmartCompletionHandlerTest
+import org.jetbrains.kotlin.idea.completion.test.handlers.*
 import org.jetbrains.kotlin.idea.completion.test.weighers.AbstractBasicCompletionWeigherTest
 import org.jetbrains.kotlin.idea.completion.test.weighers.AbstractSmartCompletionWeigherTest
+import org.jetbrains.kotlin.idea.completion.wheigher.AbstractHighLevelWeigherTest
 import org.jetbrains.kotlin.idea.configuration.AbstractGradleConfigureProjectByChangingFileTest
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractJavaToKotlinCopyPasteConversionTest
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractLiteralKotlinToKotlinCopyPasteTest
@@ -80,20 +73,27 @@ import org.jetbrains.kotlin.idea.decompiler.textBuilder.AbstractCommonDecompiled
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.AbstractCommonDecompiledTextTest
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.AbstractJsDecompiledTextFromJsMetadataTest
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.AbstractJvmDecompiledTextTest
+import org.jetbrains.kotlin.idea.editor.AbstractEnterAfterUnmatchedBraceHandlerTest
 import org.jetbrains.kotlin.idea.editor.AbstractMultiLineStringIndentTest
 import org.jetbrains.kotlin.idea.editor.backspaceHandler.AbstractBackspaceHandlerTest
 import org.jetbrains.kotlin.idea.editor.quickDoc.AbstractQuickDocProviderTest
 import org.jetbrains.kotlin.idea.filters.AbstractKotlinExceptionFilterTest
-import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirLazyResolveTest
-import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirMultiModuleResolveTest
 import org.jetbrains.kotlin.idea.fir.AbstractKtDeclarationAndFirDeclarationEqualityChecker
+import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirLazyDeclarationResolveTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirLazyResolveTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirMultiModuleLazyResolveTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.AbstractFirMultiModuleResolveTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.file.structure.AbstractFileStructureAndOutOfBlockModificationTrackerConsistencyTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.file.structure.AbstractFileStructureTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.sessions.AbstractSessionsInvalidationTest
+import org.jetbrains.kotlin.idea.fir.low.level.api.trackers.AbstractProjectWideOutOfBlockKotlinModificationTrackerTest
 import org.jetbrains.kotlin.idea.folding.AbstractKotlinFoldingTest
+import org.jetbrains.kotlin.idea.frontend.api.components.AbstractExpectedExpressionTypeTest
+import org.jetbrains.kotlin.idea.frontend.api.components.AbstractReturnExpressionTargetTest
 import org.jetbrains.kotlin.idea.frontend.api.fir.AbstractResolveCallTest
+import org.jetbrains.kotlin.idea.frontend.api.scopes.AbstractFileScopeTest
 import org.jetbrains.kotlin.idea.frontend.api.scopes.AbstractMemberScopeByFqNameTest
-import org.jetbrains.kotlin.idea.frontend.api.symbols.AbstractSymbolFromLibraryPointerRestoreTest
-import org.jetbrains.kotlin.idea.frontend.api.symbols.AbstractSymbolsByFqNameBuildingTest
-import org.jetbrains.kotlin.idea.frontend.api.symbols.AbstractSymbolFromSourcePointerRestoreTest
-import org.jetbrains.kotlin.idea.frontend.api.symbols.AbstractSymbolsByPsiBuildingTest
+import org.jetbrains.kotlin.idea.frontend.api.symbols.*
 import org.jetbrains.kotlin.idea.hierarchy.AbstractHierarchyTest
 import org.jetbrains.kotlin.idea.hierarchy.AbstractHierarchyWithLibTest
 import org.jetbrains.kotlin.idea.highlighter.*
@@ -169,8 +169,13 @@ import org.jetbrains.kotlin.nj2k.AbstractTextNewJavaToKotlinCopyPasteConversionT
 import org.jetbrains.kotlin.nj2k.inference.common.AbstractCommonConstraintCollectorTest
 import org.jetbrains.kotlin.nj2k.inference.mutability.AbstractMutabilityInferenceTest
 import org.jetbrains.kotlin.nj2k.inference.nullability.AbstractNullabilityInferenceTest
-import org.jetbrains.kotlin.noarg.AbstractBlackBoxCodegenTestForNoArg
-import org.jetbrains.kotlin.noarg.AbstractBytecodeListingTestForNoArg
+import org.jetbrains.kotlin.noarg.*
+import org.jetbrains.kotlin.pacelize.ide.test.AbstractParcelizeCheckerTest
+import org.jetbrains.kotlin.pacelize.ide.test.AbstractParcelizeQuickFixTest
+import org.jetbrains.kotlin.parcelize.test.AbstractParcelizeBoxTest
+import org.jetbrains.kotlin.parcelize.test.AbstractParcelizeBytecodeListingTest
+import org.jetbrains.kotlin.parcelize.test.AbstractParcelizeIrBoxTest
+import org.jetbrains.kotlin.parcelize.test.AbstractParcelizeIrBytecodeListingTest
 import org.jetbrains.kotlin.psi.patternMatching.AbstractPsiUnifierTest
 import org.jetbrains.kotlin.samWithReceiver.AbstractSamWithReceiverScriptTest
 import org.jetbrains.kotlin.samWithReceiver.AbstractSamWithReceiverTest
@@ -188,8 +193,7 @@ import org.jetbrains.kotlinx.serialization.AbstractSerializationPluginDiagnostic
 
 fun main(args: Array<String>) {
     System.setProperty("java.awt.headless", "true")
-
-    testGroupSuite(args) {
+    generateTestGroupSuite(args) {
         testGroup("idea/jvm-debugger/jvm-debugger-test/test", "idea/jvm-debugger/jvm-debugger-test/testData") {
             testClass<AbstractKotlinSteppingTest> {
                 model(
@@ -244,6 +248,11 @@ fun main(args: Array<String>) {
             testClass<AbstractKotlinEvaluateExpressionTest> {
                 model("evaluation/singleBreakpoint", testMethod = "doSingleBreakpointTest")
                 model("evaluation/multipleBreakpoints", testMethod = "doMultipleBreakpointsTest")
+            }
+
+            testClass<AbstractIrKotlinEvaluateExpressionTest> {
+                model("evaluation/singleBreakpoint", testMethod = "doSingleBreakpointTest", targetBackend = TargetBackend.JVM_IR)
+                model("evaluation/multipleBreakpoints", testMethod = "doMultipleBreakpointsTest", targetBackend = TargetBackend.JVM_IR)
             }
 
             testClass<AbstractSelectExpressionForDebuggerTest> {
@@ -374,15 +383,15 @@ fun main(args: Array<String>) {
                 model("navigation/gotoSymbol", testMethod = "doSymbolTest")
             }
 
-            testClass<AbstractNavigateToLibrarySourceTest>(annotations = listOf(muteExtraSuffix(".libsrc"))) {
+            testClass<AbstractNavigateToLibrarySourceTest>() {
                 model("decompiler/navigation/usercode")
             }
 
-            testClass<AbstractNavigateJavaToLibrarySourceTest>(annotations = listOf(muteExtraSuffix(".libsrc"))) {
+            testClass<AbstractNavigateJavaToLibrarySourceTest>() {
                 model("decompiler/navigation/userJavaCode", pattern = "^(.+)\\.java$")
             }
 
-            testClass<AbstractNavigateToLibrarySourceTestWithJS>(annotations = listOf(muteExtraSuffix(".libsrcjs"))) {
+            testClass<AbstractNavigateToLibrarySourceTestWithJS>() {
                 model("decompiler/navigation/usercode", testClassName = "UsercodeWithJSModule")
             }
 
@@ -538,6 +547,10 @@ fun main(args: Array<String>) {
                 model("editor/backspaceHandler")
             }
 
+            testClass<AbstractEnterAfterUnmatchedBraceHandlerTest> {
+                model("editor/enterHandler/afterUnmatchedBrace")
+            }
+
             testClass<AbstractMultiLineStringIndentTest> {
                 model("editor/enterHandler/multilineString")
             }
@@ -604,6 +617,10 @@ fun main(args: Array<String>) {
 
             testClass<AbstractKotlinFindUsagesWithLibraryTest> {
                 model("findUsages/libraryUsages", pattern = """^(.+)\.0\.kt$""")
+            }
+
+            testClass<AbstractKotlinFindUsagesWithStdlibTest> {
+                model("findUsages/stdlibUsages", pattern = """^(.+)\.0\.kt$""")
             }
 
             testClass<AbstractMoveTest> {
@@ -995,12 +1012,28 @@ fun main(args: Array<String>) {
                 model("memberScopeByFqName", extension = "txt")
             }
 
+            testClass<AbstractFileScopeTest> {
+                model("fileScopeTest", extension = "kt")
+            }
+
             testClass<AbstractSymbolFromSourcePointerRestoreTest> {
                 model("symbolPointer", extension = "kt")
             }
 
             testClass<AbstractSymbolFromLibraryPointerRestoreTest> {
                 model("resoreSymbolFromLibrary", extension = "txt")
+            }
+
+            testClass<AbstractMemoryLeakInSymbolsTest> {
+                model("symbolMemoryLeak")
+            }
+
+            testClass<AbstractReturnExpressionTargetTest> {
+                model("components/returnExpressionTarget")
+            }
+
+            testClass<AbstractExpectedExpressionTypeTest> {
+                model("components/expectedExpressionType")
             }
         }
 
@@ -1014,10 +1047,43 @@ fun main(args: Array<String>) {
             }
         }
 
+        testGroup("idea/idea-frontend-fir/idea-fir-low-level-api/tests", "idea/idea-frontend-fir/idea-fir-low-level-api/testdata") {
+            testClass<AbstractFirMultiModuleLazyResolveTest> {
+                model("multiModuleLazyResolve", recursive = false, extension = null)
+            }
+            testClass<AbstractFirLazyDeclarationResolveTest> {
+                model("lazyResolve")
+            }
+            testClass<AbstractProjectWideOutOfBlockKotlinModificationTrackerTest> {
+                model("outOfBlockProjectWide")
+            }
+            testClass<AbstractFileStructureAndOutOfBlockModificationTrackerConsistencyTest> {
+                model("outOfBlockProjectWide")
+            }
+            testClass<AbstractFileStructureTest> {
+                model("fileStructure")
+            }
+            testClass<AbstractSessionsInvalidationTest> {
+                model("sessionInvalidation", recursive = false, extension = null)
+            }
+        }
+
         testGroup("idea/idea-fir/tests", "idea") {
             testClass<AbstractFirHighlightingTest> {
                 model("testData/highlighter")
                 model("idea-fir/testData/highlighterFir", pattern = KT_WITHOUT_DOTS_IN_NAME)
+            }
+        }
+
+        testGroup("idea/idea-fir-performance-tests/tests", "idea") {
+            testClass<AbstractFirHighlightingPerformanceTest> {
+                model("testData/highlighter")
+            }
+        }
+
+        testGroup("idea/idea-fir-performance-tests/tests", "idea/idea-completion/testData") {
+            testClass<AbstractHighLevelPerformanceBasicCompletionHandlerTest> {
+                model("handlers/basic", testMethod = "doPerfTest", pattern = KT_WITHOUT_DOTS_IN_NAME)
             }
         }
 
@@ -1033,6 +1099,42 @@ fun main(args: Array<String>) {
                 model("checker/rendering")
                 model("checker/infos")
                 model("checker/diagnosticsMessage")
+            }
+        }
+
+        testGroup("idea/idea-fir/tests", "idea/idea-completion/testData") {
+            testClass<AbstractHighLevelJvmBasicCompletionTest> {
+                model("basic/common")
+                model("basic/java")
+            }
+
+            testClass<AbstractHighLevelBasicCompletionHandlerTest> {
+                model("handlers/basic", pattern = KT_WITHOUT_DOTS_IN_NAME)
+            }
+
+            testClass<AbstractHighLevelWeigherTest> {
+                model("weighers/basic", pattern = KT_OR_KTS_WITHOUT_DOTS_IN_NAME)
+            }
+        }
+
+        testGroup("idea/idea-fir/tests", "idea/testData/findUsages") {
+
+            testClass<AbstractFindUsagesFirTest> {
+                model("kotlin", pattern = """^(.+)\.0\.(kt|kts)$""")
+                model("java", pattern = """^(.+)\.0\.java$""")
+                model("propertyFiles", pattern = """^(.+)\.0\.properties$""")
+            }
+
+            testClass<AbstractFindUsagesWithDisableComponentSearchFirTest> {
+                model("kotlin/conventions/components", pattern = """^(.+)\.0\.(kt|kts)$""")
+            }
+
+            testClass<AbstractKotlinFindUsagesWithLibraryFirTest> {
+                model("libraryUsages", pattern = """^(.+)\.0\.kt$""")
+            }
+
+            testClass<AbstractKotlinFindUsagesWithStdlibFirTest> {
+                model("stdlibUsages", pattern = """^(.+)\.0\.kt$""")
             }
         }
 
@@ -1148,6 +1250,20 @@ fun main(args: Array<String>) {
                     excludeDirs = listOf("local", "compilationErrors", "ideRegression"),
                     pattern = KT_OR_KTS_WITHOUT_DOTS_IN_NAME
                 )
+            }
+        }
+
+        testGroup("idea/idea-fir/tests", "compiler/testData") {
+            testClass<AbstractFirLightClassTest> {
+                model("asJava/lightClasses", excludeDirs = listOf("delegation", "script"), pattern = KT_WITHOUT_DOTS_IN_NAME)
+            }
+
+            testClass<AbstractFirClassLoadingTest> {
+                model("asJava/ultraLightClasses", pattern = KT_OR_KTS)
+            }
+
+            testClass<AbstractFirLightFacadeClassTest> {
+                model("asJava/ultraLightFacades", pattern = KT_OR_KTS)
             }
         }
 
@@ -1411,8 +1527,9 @@ fun main(args: Array<String>) {
                 model("incremental/js", extension = null, excludeParentDirs = true)
             }
 
-            testClass<AbstractIncrementalJsKlibCompilerRunnerTest>(annotations = listOf(muteExtraSuffix(".jsklib"))) {
-                model("incremental/pureKotlin", extension = null, recursive = false)
+            testClass<AbstractIncrementalJsKlibCompilerRunnerTest>() {
+                // IC of sealed interfaces are not supported in JS
+                model("incremental/pureKotlin", extension = null, recursive = false, excludedPattern = "^sealed.*")
                 model("incremental/classHierarchyAffected", extension = null, recursive = false)
                 model("incremental/js", extension = null, excludeParentDirs = true)
             }
@@ -1424,7 +1541,8 @@ fun main(args: Array<String>) {
             }
 
             testClass<AbstractIncrementalJsKlibCompilerWithScopeExpansionRunnerTest> {
-                model("incremental/pureKotlin", extension = null, recursive = false)
+                // IC of sealed interfaces are not supported in JS
+                model("incremental/pureKotlin", extension = null, recursive = false, excludedPattern = "^sealed.*")
                 model("incremental/classHierarchyAffected", extension = null, recursive = false)
                 model("incremental/js", extension = null, excludeParentDirs = true)
                 model("incremental/scopeExpansion", extension = null, excludeParentDirs = true)
@@ -1488,6 +1606,34 @@ fun main(args: Array<String>) {
             }
         }
 
+        testGroup("plugins/parcelize/parcelize-compiler/tests", "plugins/parcelize/parcelize-compiler/testData") {
+            testClass<AbstractParcelizeBoxTest> {
+                model("box", targetBackend = TargetBackend.JVM)
+            }
+
+            testClass<AbstractParcelizeIrBoxTest> {
+                model("box", targetBackend = TargetBackend.JVM_IR)
+            }
+
+            testClass<AbstractParcelizeBytecodeListingTest> {
+                model("codegen", targetBackend = TargetBackend.JVM)
+            }
+
+            testClass<AbstractParcelizeIrBytecodeListingTest> {
+                model("codegen", targetBackend = TargetBackend.JVM_IR)
+            }
+        }
+
+        testGroup("plugins/parcelize/parcelize-ide/tests", "plugins/parcelize/parcelize-ide/testData") {
+            testClass<AbstractParcelizeQuickFixTest> {
+                model("quickfix", pattern = "^([\\w\\-_]+)\\.kt$", filenameStartsLowerCase = true)
+            }
+
+            testClass<AbstractParcelizeCheckerTest> {
+                model("checker", extension = "kt")
+            }
+        }
+
         testGroup("plugins/jvm-abi-gen/test", "plugins/jvm-abi-gen/testData") {
             testClass<AbstractCompareJvmAbiTest> {
                 model("compare", recursive = false, extension = null)
@@ -1537,13 +1683,17 @@ fun main(args: Array<String>) {
         }
 
         testGroup("plugins/noarg/noarg-cli/test", "plugins/noarg/noarg-cli/testData") {
+            testClass<AbstractDiagnosticsTestForNoArg> { model("diagnostics", extension = "kt") }
+
             testClass<AbstractBytecodeListingTestForNoArg> {
-                model("bytecodeListing", extension = "kt")
+                model("bytecodeListing", extension = "kt", targetBackend = TargetBackend.JVM)
+            }
+            testClass<AbstractIrBytecodeListingTestForNoArg> {
+                model("bytecodeListing", extension = "kt", targetBackend = TargetBackend.JVM_IR)
             }
 
-            testClass<AbstractBlackBoxCodegenTestForNoArg> {
-                model("box", targetBackend = TargetBackend.JVM)
-            }
+            testClass<AbstractBlackBoxCodegenTestForNoArg> { model("box", targetBackend = TargetBackend.JVM) }
+            testClass<AbstractIrBlackBoxCodegenTestForNoArg> { model("box", targetBackend = TargetBackend.JVM_IR) }
         }
 
         testGroup("plugins/sam-with-receiver/sam-with-receiver-cli/test", "plugins/sam-with-receiver/sam-with-receiver-cli/testData") {

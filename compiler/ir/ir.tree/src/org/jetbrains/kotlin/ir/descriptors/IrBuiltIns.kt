@@ -68,7 +68,7 @@ class IrBuiltIns(
 
         val symbol = symbolTable.declareSimpleFunctionIfNotExists(operatorDescriptor) {
             val operator = irFactory.createFunction(
-                UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, it, Name.identifier(name), Visibilities.PUBLIC, Modality.FINAL,
+                UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, it, Name.identifier(name), DescriptorVisibilities.PUBLIC, Modality.FINAL,
                 returnType, isInline = false, isExternal = false, isTailrec = false, isSuspend = false,
                 isOperator = false, isInfix = false, isExpect = false, isFakeOverride = false
             )
@@ -80,7 +80,7 @@ class IrBuiltIns(
                 val valueParameterSymbol = IrValueParameterSymbolImpl(valueParameterDescriptor)
                 irFactory.createValueParameter(
                     UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, valueParameterSymbol, Name.identifier("arg$i"), i,
-                    valueParameterType, null, isCrossinline = false, isNoinline = false
+                    valueParameterType, null, isCrossinline = false, isNoinline = false, isHidden = false, isAssignable = false
                 ).apply {
                     parent = operator
                 }
@@ -128,7 +128,7 @@ class IrBuiltIns(
 
             initialize(
                 null, null, listOf(typeParameterDescriptor), listOf(valueParameterDescriptor), returnKotlinType,
-                Modality.FINAL, Visibilities.PUBLIC
+                Modality.FINAL, DescriptorVisibilities.PUBLIC
             )
         }
 
@@ -155,7 +155,7 @@ class IrBuiltIns(
 
         return symbolTable.declareSimpleFunctionIfNotExists(operatorDescriptor) {
             val operator = irFactory.createFunction(
-                UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, it, name, Visibilities.PUBLIC, Modality.FINAL, returnIrType,
+                UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, it, name, DescriptorVisibilities.PUBLIC, Modality.FINAL, returnIrType,
                 isInline = false, isExternal = false, isTailrec = false, isSuspend = false, isOperator = false, isInfix = false,
                 isExpect = false, isFakeOverride = false
             )
@@ -165,7 +165,7 @@ class IrBuiltIns(
             val valueParameterSymbol = IrValueParameterSymbolImpl(valueParameterDescriptor)
             val valueParameter = irFactory.createValueParameter(
                 UNDEFINED_OFFSET, UNDEFINED_OFFSET, BUILTIN_OPERATOR, valueParameterSymbol, Name.identifier("arg0"), 0,
-                valueIrType, null, isCrossinline = false, isNoinline = false
+                valueIrType, null, isCrossinline = false, isNoinline = false, isHidden = false, isAssignable = false
             )
 
             valueParameter.parent = operator

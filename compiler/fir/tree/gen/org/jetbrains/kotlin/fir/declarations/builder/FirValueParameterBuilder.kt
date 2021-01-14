@@ -1,12 +1,11 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.declarations.builder
 
 import kotlin.contracts.*
-import org.jetbrains.kotlin.fir.FirImplementationDetail
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirAnnotationContainerBuilder
@@ -37,6 +36,7 @@ open class FirValueParameterBuilder : FirAnnotationContainerBuilder {
     open lateinit var session: FirSession
     open var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
     open lateinit var origin: FirDeclarationOrigin
+    open var attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     open lateinit var returnTypeRef: FirTypeRef
     open lateinit var name: Name
     open lateinit var symbol: FirVariableSymbol<FirValueParameter>
@@ -46,13 +46,13 @@ open class FirValueParameterBuilder : FirAnnotationContainerBuilder {
     open var isNoinline: Boolean by kotlin.properties.Delegates.notNull<Boolean>()
     open var isVararg: Boolean by kotlin.properties.Delegates.notNull<Boolean>()
 
-    @OptIn(FirImplementationDetail::class)
     override fun build(): FirValueParameter {
         return FirValueParameterImpl(
             source,
             session,
             resolvePhase,
             origin,
+            attributes,
             returnTypeRef,
             name,
             symbol,
@@ -84,6 +84,7 @@ inline fun buildValueParameterCopy(original: FirValueParameter, init: FirValuePa
     copyBuilder.session = original.session
     copyBuilder.resolvePhase = original.resolvePhase
     copyBuilder.origin = original.origin
+    copyBuilder.attributes = original.attributes.copy()
     copyBuilder.returnTypeRef = original.returnTypeRef
     copyBuilder.name = original.name
     copyBuilder.symbol = original.symbol

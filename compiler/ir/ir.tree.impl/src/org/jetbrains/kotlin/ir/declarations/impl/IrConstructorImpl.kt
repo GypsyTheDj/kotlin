@@ -17,7 +17,7 @@
 package org.jetbrains.kotlin.ir.declarations.impl
 
 import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrBody
@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrUninitializedType
+import org.jetbrains.kotlin.ir.types.impl.ReturnTypeIsNotInitializedException
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
@@ -34,7 +35,7 @@ class IrConstructorImpl(
     override var origin: IrDeclarationOrigin,
     override val symbol: IrConstructorSymbol,
     override val name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     returnType: IrType,
     override val isInline: Boolean,
     override val isExternal: Boolean,
@@ -54,7 +55,7 @@ class IrConstructorImpl(
 
     override var returnType: IrType = returnType
         get() = if (field === IrUninitializedType) {
-            error("Return type is not initialized")
+            throw ReturnTypeIsNotInitializedException(this)
         } else {
             field
         }

@@ -102,7 +102,7 @@ private class ClassClsStubBuilder(
             relevantFlags.add(INNER)
             relevantFlags.add(DATA)
             relevantFlags.add(MODALITY)
-            relevantFlags.add(INLINE_CLASS)
+            relevantFlags.add(VALUE_CLASS)
         }
         if (isInterface()) {
             relevantFlags.add(FUN_INTERFACE)
@@ -178,6 +178,7 @@ private class ClassClsStubBuilder(
         createCompanionObjectStub(classBody)
         createCallableMemberStubs(classBody)
         createInnerAndNestedClasses(classBody)
+        createTypeAliasesStubs(classBody)
     }
 
     private fun createCompanionObjectStub(classBody: KotlinPlaceHolderStubImpl<KtClassBody>) {
@@ -219,9 +220,7 @@ private class ClassClsStubBuilder(
             }
         }
 
-        createDeclarationsStubs(
-            classBody, c, thisAsProtoContainer, classProto.functionList, classProto.propertyList, classProto.typeAliasList
-        )
+        createDeclarationsStubs(classBody, c, thisAsProtoContainer, classProto.functionList, classProto.propertyList)
     }
 
     private fun isClass(): Boolean {
@@ -242,6 +241,10 @@ private class ClassClsStubBuilder(
                 createNestedClassStub(classBody, nestedClassId)
             }
         }
+    }
+
+    private fun createTypeAliasesStubs(classBody: KotlinPlaceHolderStubImpl<KtClassBody>) {
+        createTypeAliasesStubs(classBody, c, thisAsProtoContainer, classProto.typeAliasList)
     }
 
     private fun createNestedClassStub(classBody: StubElement<out PsiElement>, nestedClassId: ClassId) {

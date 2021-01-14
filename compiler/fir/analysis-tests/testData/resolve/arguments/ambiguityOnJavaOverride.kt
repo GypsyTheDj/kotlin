@@ -15,5 +15,5 @@ class B : A() {
 }
 
 fun test(b: B) {
-    b.foo("")
+    b.<!HIDDEN{LT}!><!HIDDEN{PSI}!>foo<!>("")<!>
 }

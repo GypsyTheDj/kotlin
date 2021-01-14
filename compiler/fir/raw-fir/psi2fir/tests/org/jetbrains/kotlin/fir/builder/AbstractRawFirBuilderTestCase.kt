@@ -14,9 +14,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.tree.IElementType
 import com.intellij.util.PathUtil
 import org.jetbrains.kotlin.KtNodeTypes
-import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.FirRenderer
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.contracts.impl.FirEmptyContractDescription
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
@@ -26,7 +24,7 @@ import org.jetbrains.kotlin.fir.expressions.FirEmptyArgumentList
 import org.jetbrains.kotlin.fir.expressions.impl.FirNoReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.impl.FirStubStatement
 import org.jetbrains.kotlin.fir.references.impl.FirStubReference
-import org.jetbrains.kotlin.fir.render
+import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.fir.types.FirTypeProjection
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.isExtensionFunctionAnnotationCall
@@ -38,6 +36,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.testFramework.KtParsingTestCase
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import java.io.File
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.jvm.isAccessible
@@ -47,7 +46,7 @@ abstract class AbstractRawFirBuilderTestCase : KtParsingTestCase(
     "kt",
     KotlinParserDefinition()
 ) {
-    override fun getTestDataPath() = KotlinTestUtils.getHomeDirectory()
+    override fun getTestDataPath() = KtTestUtil.getHomeDirectory()
 
     private fun createFile(filePath: String, fileType: IElementType): PsiFile {
         val psiFactory = KtPsiFactory(myProject)
@@ -63,7 +62,7 @@ abstract class AbstractRawFirBuilderTestCase : KtParsingTestCase(
 
     protected open fun doRawFirTest(filePath: String) {
         val file = createKtFile(filePath)
-        val firFile = file.toFirFile(stubMode = false)
+        val firFile = file.toFirFile(RawFirBuilderMode.NORMAL)
         val firFileDump = StringBuilder().also { FirRenderer(it).visitFile(firFile) }.toString()
         val expectedPath = filePath.replace(".kt", ".txt")
         KotlinTestUtils.assertEqualsToFile(File(expectedPath), firFileDump)
@@ -76,8 +75,10 @@ abstract class AbstractRawFirBuilderTestCase : KtParsingTestCase(
         }
     }
 
-    protected fun KtFile.toFirFile(stubMode: Boolean): FirFile =
-        RawFirBuilder(object : FirSession(null) {}, StubFirScopeProvider, stubMode).buildFirFile(this)
+    protected fun KtFile.toFirFile(mode: RawFirBuilderMode = RawFirBuilderMode.NORMAL): FirFile {
+        val session = FirSessionFactory.createEmptySession()
+        return RawFirBuilder(session, StubFirScopeProvider, mode).buildFirFile(this)
+    }
 
     private fun FirElement.traverseChildren(result: MutableSet<FirElement> = hashSetOf()): MutableSet<FirElement> {
         if (!result.add(this)) {

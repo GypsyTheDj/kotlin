@@ -15,6 +15,7 @@ dependencies {
     compile(project(":compiler:fir:checkers"))
     compile(project(":compiler:fir:java"))
     compile(project(":compiler:fir:jvm"))
+    implementation(project(":compiler:fir:entrypoint"))
     compile(intellijDep())
     compile(intellijCoreDep())
 
@@ -28,15 +29,14 @@ dependencies {
 
     testCompile(toolsJar())
     testCompile(projectTests(":idea"))
+    testCompile(project(":idea:idea-fir"))
     testCompile(projectTests(":compiler:tests-common"))
-    testCompile(projectTests(":compiler:fir:analysis-tests"))
+    testCompile(projectTests(":compiler:fir:analysis-tests:legacy-fir-tests"))
     testCompile(projectTests(":idea:idea-test-framework"))
     testCompile(project(":kotlin-test:kotlin-test-junit"))
     testCompile(commonDep("junit:junit"))
 
-    Platform[192].orHigher {
-        compile(intellijPluginDep("java"))
-    }
+    compile(intellijPluginDep("java"))
 }
 
 sourceSets {
@@ -44,10 +44,13 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-if (rootProject.findProperty("idea.fir.plugin") == "true") {
-    projectTest {
-        dependsOn(":dist")
-        workingDir = rootDir
+projectTest {
+    dependsOn(":dist")
+    workingDir = rootDir
+    doFirst {
+        if (!kotlinBuildProperties.useFirIdeaPlugin) {
+            error("Test task in the module should be executed with -Pidea.fir.plugin=true")
+        }
     }
 }
 

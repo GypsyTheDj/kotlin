@@ -268,10 +268,10 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
         val vDeclaration = irFactory.createValueParameter(
             offset, offset, classOrigin, vSymbol, Name.special("<this>"), -1, type, null,
             isCrossinline = false,
-            isNoinline = false
+            isNoinline = false,
+            isHidden = false,
+            isAssignable = false
         )
-
-        if (vDescriptor is WrappedReceiverParameterDescriptor) vDescriptor.bind(vDeclaration)
 
         return vDeclaration
     }
@@ -303,7 +303,7 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
                 }
 
                 irFactory.createFunction(
-                    offset, offset, memberOrigin, it, Name.identifier("invoke"), Visibilities.PUBLIC, Modality.ABSTRACT,
+                    offset, offset, memberOrigin, it, Name.identifier("invoke"), DescriptorVisibilities.PUBLIC, Modality.ABSTRACT,
                     returnType,
                     isInline = false,
                     isExternal = false,
@@ -332,10 +332,11 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
                 val vDeclaration = irFactory.createValueParameter(
                     offset, offset, memberOrigin, vSymbol, Name.identifier("p$i"), i - 1, vType, null,
                     isCrossinline = false,
-                    isNoinline = false
+                    isNoinline = false,
+                    isHidden = false,
+                    isAssignable = false
                 )
                 vDeclaration.parent = fDeclaration
-                if (vDescriptor is WrappedValueParameterDescriptor) vDescriptor.bind(vDeclaration)
                 fDeclaration.valueParameters += vDeclaration
             }
 
@@ -364,7 +365,7 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
     private fun IrFunction.createValueParameter(descriptor: ParameterDescriptor): IrValueParameter = with(descriptor) {
         irFactory.createValueParameter(
             offset, offset, memberOrigin, IrValueParameterSymbolImpl(this), name, indexOrMinusOne, toIrType(type),
-            (this as? ValueParameterDescriptor)?.varargElementType?.let(::toIrType), isCrossinline, isNoinline
+            (this as? ValueParameterDescriptor)?.varargElementType?.let(::toIrType), isCrossinline, isNoinline, false, false
         ).also {
             it.parent = this@createValueParameter
         }
@@ -441,7 +442,7 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
         val name = functionClassName(isK, isSuspend, n)
         if (symbol.isBound) return symbol.owner
         val klass = irFactory.createClass(
-            offset, offset, classOrigin, symbol, Name.identifier(name), ClassKind.INTERFACE, Visibilities.PUBLIC, Modality.ABSTRACT
+            offset, offset, classOrigin, symbol, Name.identifier(name), ClassKind.INTERFACE, DescriptorVisibilities.PUBLIC, Modality.ABSTRACT
         )
 
         val r = klass.createTypeParameters(n, descriptorFactory)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -12,7 +12,8 @@ import org.jetbrains.kotlin.fir.contracts.FirContractDescription
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirBlock
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
-import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
@@ -36,9 +37,10 @@ abstract class FirSimpleFunction : FirPureAbstractElement(), FirFunction<FirSimp
     abstract override val body: FirBlock?
     abstract override val status: FirDeclarationStatus
     abstract override val containerSource: DeserializedContainerSource?
+    abstract override val dispatchReceiverType: ConeKotlinType?
     abstract override val contractDescription: FirContractDescription
     abstract val name: Name
-    abstract override val symbol: FirFunctionSymbol<FirSimpleFunction>
+    abstract override val symbol: FirNamedFunctionSymbol
     abstract override val annotations: List<FirAnnotationCall>
     abstract override val typeParameters: List<FirTypeParameter>
 
@@ -53,6 +55,8 @@ abstract class FirSimpleFunction : FirPureAbstractElement(), FirFunction<FirSimp
     abstract override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?)
 
     abstract override fun replaceValueParameters(newValueParameters: List<FirValueParameter>)
+
+    abstract override fun replaceBody(newBody: FirBlock?)
 
     abstract override fun replaceContractDescription(newContractDescription: FirContractDescription)
 

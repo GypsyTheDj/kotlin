@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.gradle
 
 import com.google.gson.Gson
 import org.gradle.api.logging.LogLevel
+import org.gradle.api.logging.configuration.WarningMode
 import org.jetbrains.kotlin.gradle.plugin.KotlinJsCompilerType
 import org.jetbrains.kotlin.gradle.targets.js.ir.KLIB_TYPE
 import org.jetbrains.kotlin.gradle.targets.js.npm.*
@@ -22,6 +23,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class Kotlin2JsIrGradlePluginIT : AbstractKotlin2JsGradlePluginIT(true) {
+
+    override fun defaultBuildOptions(): BuildOptions {
+        return super.defaultBuildOptions().copy(warningMode = WarningMode.Summary)
+    }
+
     @Test
     fun generateDts() {
         val project = Project("kotlin2JsIrDtsGeneration")
@@ -116,6 +122,11 @@ class Kotlin2JsIrGradlePluginIT : AbstractKotlin2JsGradlePluginIT(true) {
 }
 
 class Kotlin2JsGradlePluginIT : AbstractKotlin2JsGradlePluginIT(false) {
+
+    override fun defaultBuildOptions(): BuildOptions {
+        return super.defaultBuildOptions().copy(warningMode = WarningMode.Summary)
+    }
+
     @Test
     fun testKotlinJsBuiltins() {
         val project = Project("kotlinBuiltins")
@@ -609,7 +620,10 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
                     val packageJson = Gson().fromJson(it, PackageJson::class.java)
                     val devDep = "42"
                     val devDepVersion = "0.0.1"
-                    assertTrue("There is expected dev dependency \"$devDep\": \"$devDepVersion\" in package.json") {
+                    assertTrue(
+                        "Dev dependency \"$devDep\": \"$devDepVersion\" in package.json expected, but actual:\n" +
+                                "${packageJson.devDependencies}"
+                    ) {
                         val devDependencies = packageJson.devDependencies
                         devDependencies
                             .containsKey(devDep) &&
@@ -618,7 +632,10 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
 
                     val dep = "@yworks/optimizer"
                     val depVersion = "1.0.6"
-                    assertTrue("There is expected dependency \"$dep\": \"$depVersion\" in package.json") {
+                    assertTrue(
+                        "Dependency \"$dep\": \"$depVersion\" in package.json expected, but actual:\n" +
+                                "${packageJson.dependencies}"
+                    ) {
                         val dependencies = packageJson.dependencies
                         dependencies
                             .containsKey(dep) &&
@@ -627,7 +644,10 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
 
                     val peerDep = "date-arithmetic"
                     val peerDepVersion = "4.1.0"
-                    assertTrue("There is expected peer dependency \"$peerDep\": \"$peerDepVersion\" in package.json") {
+                    assertTrue(
+                        "Peer dependency \"$peerDep\": \"$peerDepVersion\" in package.json expected, but actual:\n" +
+                                "${packageJson.peerDependencies}"
+                    ) {
                         val peerDependencies = packageJson.peerDependencies
                         peerDependencies
                             .containsKey(peerDep) &&
@@ -684,8 +704,8 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
 
             assertTasksExecuted(":app:browserProductionWebpack")
 
-            assertFileExists("build/js/packages/kotlin-js-browser-base-jsIr")
-            assertFileExists("build/js/packages/kotlin-js-browser-base-jsLegacy")
+            assertFileExists("build/js/packages/kotlin-js-browser-base-js-ir")
+            assertFileExists("build/js/packages/kotlin-js-browser-base-js-legacy")
             assertFileExists("build/js/packages/kotlin-js-browser-lib")
             assertFileExists("build/js/packages/kotlin-js-browser-app")
 
@@ -699,7 +719,7 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
                 assertFileExists("build/js/packages/kotlin-js-browser-app/kotlin-dce/kotlin.js")
                 assertFileExists("build/js/packages/kotlin-js-browser-app/kotlin-dce/kotlin-js-browser-app.js")
                 assertFileExists("build/js/packages/kotlin-js-browser-app/kotlin-dce/kotlin-js-browser-lib.js")
-                assertFileExists("build/js/packages/kotlin-js-browser-app/kotlin-dce/kotlin-js-browser-base-jsLegacy.js")
+                assertFileExists("build/js/packages/kotlin-js-browser-app/kotlin-dce/kotlin-js-browser-base-js-legacy.js")
 
                 assertFileExists("app/build/distributions/app.js.map")
             }
@@ -708,7 +728,7 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
         build("clean", "browserDistribution") {
             assertTasksExecuted(
                 ":app:processResources",
-                ":app:browserDistributeResources"
+                if (irBackend) ":app:browserProductionExecutableDistributeResources" else ":app:browserDistributeResources"
             )
 
             assertFileExists("app/build/distributions/index.html")
@@ -754,17 +774,6 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
         setupWorkingDir()
         gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
 
-        fun assertYarnResolutions(
-            packageJson: PackageJson
-        ) {
-            val name = "lodash"
-            val version = packageJson.resolutions?.get(name)
-            val requiredVersion = ">=1.0.0 <1.2.1 || >1.4.0 <2.0.0"
-            assertTrue("Root package.json must have resolution $name with version $requiredVersion, but $version found") {
-                version == requiredVersion
-            }
-        }
-
         build("packageJson", "rootPackageJson", "kotlinNpmInstall") {
             assertSuccessful()
 
@@ -775,7 +784,43 @@ abstract class AbstractKotlin2JsGradlePluginIT(private val irBackend: Boolean) :
                         Gson().fromJson(it.readText(), PackageJson::class.java)
                     }
 
-            assertYarnResolutions(getPackageJson())
+            val name = "lodash"
+            val version = getPackageJson().resolutions?.get(name)
+            val requiredVersion = ">=1.0.0 <1.2.1 || >1.4.0 <2.0.0"
+            assertTrue("Root package.json must have resolution $name with version $requiredVersion, but $version found") {
+                version == requiredVersion
+            }
+
+            val react = "react"
+            val reactVersion = getPackageJson().resolutions?.get(react)
+            val requiredReactVersion = "16.0.0"
+            assertTrue("Root package.json must have resolution $react with version $requiredReactVersion, but $reactVersion found") {
+                reactVersion == requiredReactVersion
+            }
+        }
+    }
+
+    @Test
+    fun testDirectoryDependencyNotFailProjectResolution() {
+        with(Project("kotlin-js-nodejs-project")) {
+            setupWorkingDir()
+            gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+            gradleSettingsScript().modify(::transformBuildScriptWithPluginsDsl)
+
+            gradleBuildScript().appendText(
+                """${"\n"}
+                dependencies {
+                    implementation(files("${"$"}{projectDir}/custom"))
+                    implementation(files("${"$"}{projectDir}/custom2"))
+                }
+            """.trimIndent()
+            )
+
+            build(
+                "packageJson"
+            ) {
+                assertSuccessful()
+            }
         }
     }
 }

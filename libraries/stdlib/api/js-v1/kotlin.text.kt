@@ -183,6 +183,30 @@ public inline fun kotlin.text.StringBuilder.deleteAt(index: kotlin.Int): kotlin.
 @kotlin.WasExperimental(markerClass = {kotlin.ExperimentalStdlibApi::class})
 public inline fun kotlin.text.StringBuilder.deleteRange(startIndex: kotlin.Int, endIndex: kotlin.Int): kotlin.text.StringBuilder
 
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Int.digitToChar(): kotlin.Char
+
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Int.digitToChar(radix: kotlin.Int): kotlin.Char
+
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Char.digitToInt(): kotlin.Int
+
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Char.digitToInt(radix: kotlin.Int): kotlin.Int
+
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Char.digitToIntOrNull(): kotlin.Int?
+
+@kotlin.ExperimentalStdlibApi
+@kotlin.SinceKotlin(version = "1.4")
+public fun kotlin.Char.digitToIntOrNull(radix: kotlin.Int): kotlin.Int?
+
 public fun kotlin.CharSequence.drop(n: kotlin.Int): kotlin.CharSequence
 
 public fun kotlin.String.drop(n: kotlin.Int): kotlin.String
@@ -382,6 +406,21 @@ public fun kotlin.CharSequence.lineSequence(): kotlin.sequences.Sequence<kotlin.
 
 public fun kotlin.CharSequence.lines(): kotlin.collections.List<kotlin.String>
 
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun kotlin.Char.lowercase(): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun kotlin.String.lowercase(): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun kotlin.Char.lowercaseChar(): kotlin.Char
+
 public inline fun <R> kotlin.CharSequence.map(transform: (kotlin.Char) -> R): kotlin.collections.List<R>
 
 public inline fun <R> kotlin.CharSequence.mapIndexed(transform: (index: kotlin.Int, kotlin.Char) -> R): kotlin.collections.List<R>
@@ -406,11 +445,11 @@ public inline infix fun kotlin.CharSequence.matches(regex: kotlin.text.Regex): k
 
 public fun kotlin.String.matches(regex: kotlin.String): kotlin.Boolean
 
-@kotlin.Deprecated(message = "Use maxOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "maxOrNull()", imports = {}))
+@kotlin.Deprecated(message = "Use maxOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.maxOrNull()", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public fun kotlin.CharSequence.max(): kotlin.Char?
 
-@kotlin.Deprecated(message = "Use maxByOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "maxByOrNull(selector)", imports = {}))
+@kotlin.Deprecated(message = "Use maxByOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.maxByOrNull(selector)", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public inline fun <R : kotlin.Comparable<R>> kotlin.CharSequence.maxBy(selector: (kotlin.Char) -> R): kotlin.Char?
 
@@ -460,18 +499,18 @@ public inline fun <R> kotlin.CharSequence.maxOfWithOrNull(comparator: kotlin.Com
 @kotlin.SinceKotlin(version = "1.4")
 public fun kotlin.CharSequence.maxOrNull(): kotlin.Char?
 
-@kotlin.Deprecated(message = "Use maxWithOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "maxWithOrNull(comparator)", imports = {}))
+@kotlin.Deprecated(message = "Use maxWithOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.maxWithOrNull(comparator)", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public fun kotlin.CharSequence.maxWith(comparator: kotlin.Comparator<in kotlin.Char>): kotlin.Char?
 
 @kotlin.SinceKotlin(version = "1.4")
 public fun kotlin.CharSequence.maxWithOrNull(comparator: kotlin.Comparator<in kotlin.Char>): kotlin.Char?
 
-@kotlin.Deprecated(message = "Use minOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "minOrNull()", imports = {}))
+@kotlin.Deprecated(message = "Use minOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.minOrNull()", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public fun kotlin.CharSequence.min(): kotlin.Char?
 
-@kotlin.Deprecated(message = "Use minByOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "minByOrNull(selector)", imports = {}))
+@kotlin.Deprecated(message = "Use minByOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.minByOrNull(selector)", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public inline fun <R : kotlin.Comparable<R>> kotlin.CharSequence.minBy(selector: (kotlin.Char) -> R): kotlin.Char?
 
@@ -521,7 +560,7 @@ public inline fun <R> kotlin.CharSequence.minOfWithOrNull(comparator: kotlin.Com
 @kotlin.SinceKotlin(version = "1.4")
 public fun kotlin.CharSequence.minOrNull(): kotlin.Char?
 
-@kotlin.Deprecated(message = "Use minWithOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "minWithOrNull(comparator)", imports = {}))
+@kotlin.Deprecated(message = "Use minWithOrNull instead.", replaceWith = kotlin.ReplaceWith(expression = "this.minWithOrNull(comparator)", imports = {}))
 @kotlin.DeprecatedSinceKotlin(warningSince = "1.4")
 public fun kotlin.CharSequence.minWith(comparator: kotlin.Comparator<in kotlin.Char>): kotlin.Char?
 
@@ -658,6 +697,20 @@ public inline fun kotlin.CharSequence.replaceFirst(regex: kotlin.text.Regex, rep
 public fun kotlin.String.replaceFirst(oldChar: kotlin.Char, newChar: kotlin.Char, ignoreCase: kotlin.Boolean = ...): kotlin.String
 
 public fun kotlin.String.replaceFirst(oldValue: kotlin.String, newValue: kotlin.String, ignoreCase: kotlin.Boolean = ...): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.OverloadResolutionByLambdaReturnType
+@kotlin.jvm.JvmName(name = "replaceFirstCharWithChar")
+@kotlin.internal.InlineOnly
+public inline fun kotlin.String.replaceFirstChar(transform: (kotlin.Char) -> kotlin.Char): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.OverloadResolutionByLambdaReturnType
+@kotlin.jvm.JvmName(name = "replaceFirstCharWithCharSequence")
+@kotlin.internal.InlineOnly
+public inline fun kotlin.String.replaceFirstChar(transform: (kotlin.Char) -> kotlin.CharSequence): kotlin.String
 
 public fun kotlin.String.replaceIndent(newIndent: kotlin.String = ...): kotlin.String
 
@@ -1078,6 +1131,20 @@ public inline fun kotlin.String.trimStart(): kotlin.String
 public inline fun kotlin.String.trimStart(predicate: (kotlin.Char) -> kotlin.Boolean): kotlin.String
 
 public fun kotlin.String.trimStart(vararg chars: kotlin.Char): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun kotlin.Char.uppercase(): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun kotlin.String.uppercase(): kotlin.String
+
+@kotlin.SinceKotlin(version = "1.4")
+@kotlin.ExperimentalStdlibApi
+public fun kotlin.Char.uppercaseChar(): kotlin.Char
 
 @kotlin.SinceKotlin(version = "1.2")
 public fun kotlin.CharSequence.windowed(size: kotlin.Int, step: kotlin.Int = ..., partialWindows: kotlin.Boolean = ...): kotlin.collections.List<kotlin.String>

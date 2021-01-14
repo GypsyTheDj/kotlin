@@ -18,8 +18,8 @@ package org.jetbrains.kotlin.daemon
 
 import com.intellij.openapi.application.ApplicationManager
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
@@ -30,12 +30,18 @@ import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.integration.KotlinIntegrationTestBase
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.testFramework.resetApplicationToNull
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Assert
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
 import java.net.URLClassLoader
+import java.nio.file.Path
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.createTempFile
+import kotlin.io.path.deleteIfExists
 
+@OptIn(ExperimentalPathApi::class)
 class CompilerApiTest : KotlinIntegrationTestBase() {
 
     private val compilerLibDir = getCompilerLib()
@@ -80,8 +86,8 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
         return code to outputs
     }
 
-    private fun getHelloAppBaseDir(): String = KotlinTestUtils.getTestDataPathBase() + "/integration/smoke/helloApp"
-    private fun getSimpleScriptBaseDir(): String = KotlinTestUtils.getTestDataPathBase() + "/integration/smoke/simpleScript"
+    private fun getHelloAppBaseDir(): String = KtTestUtil.getTestDataPathBase() + "/integration/smoke/helloApp"
+    private fun getSimpleScriptBaseDir(): String = KtTestUtil.getTestDataPathBase() + "/integration/smoke/simpleScript"
 
     private fun run(baseDir: String, logName: String, vararg args: String): Int = runJava(baseDir, logName, *args)
 
@@ -119,7 +125,7 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
                                               verbose = true,
                                               reportPerf = true)
 
-            val logFile = createTempFile("kotlin-daemon-test.", ".log")
+            val logFile: Path = createTempFile("kotlin-daemon-test.", ".log")
 
             val daemonJVMOptions = configureDaemonJVMOptions("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"${logFile.loggerCompatiblePath}\"",
                                                              inheritMemoryLimits = false, inheritOtherJvmOptions = false, inheritAdditionalProperties = false)
@@ -137,7 +143,8 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
             }
             finally {
                 KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
-                logFile.delete()
+                runCatching { logFile.deleteIfExists() }
+                    .onFailure { e -> println("Failed to delete log file: $e") }
             }
         }
     }
@@ -158,7 +165,7 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
                                               verbose = true,
                                               reportPerf = true)
 
-            val logFile = createTempFile("kotlin-daemon-test.", ".log")
+            val logFile: Path = createTempFile("kotlin-daemon-test.", ".log")
 
             val daemonJVMOptions = configureDaemonJVMOptions("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"${logFile.loggerCompatiblePath}\"",
                                                              inheritMemoryLimits = false, inheritOtherJvmOptions = false, inheritAdditionalProperties = false)
@@ -174,7 +181,8 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
             }
             finally {
                 KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
-                logFile.delete()
+                runCatching { logFile.deleteIfExists() }
+                    .onFailure { e -> println("Failed to delete log file: $e") }
             }
         }
     }

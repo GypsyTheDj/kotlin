@@ -44,6 +44,7 @@ object JsExternalChecker : DeclarationChecker {
                 descriptor.isData -> "data class"
                 descriptor.isInner -> "inner class"
                 descriptor.isInline -> "inline class"
+                descriptor.isValue -> "value class"
                 descriptor.isFun -> "fun interface"
                 DescriptorUtils.isAnnotationClass(descriptor) -> "annotation class"
                 else -> null
@@ -216,7 +217,7 @@ object JsExternalChecker : DeclarationChecker {
 
     private fun isPrivateMemberOfExternalClass(descriptor: DeclarationDescriptor): Boolean {
         if (descriptor is PropertyAccessorDescriptor && descriptor.visibility == descriptor.correspondingProperty.visibility) return false
-        if (descriptor !is MemberDescriptor || descriptor.visibility != Visibilities.PRIVATE) return false
+        if (descriptor !is MemberDescriptor || descriptor.visibility != DescriptorVisibilities.PRIVATE) return false
 
         val containingDeclaration = descriptor.containingDeclaration as? ClassDescriptor ?: return false
         return AnnotationsUtils.isNativeObject(containingDeclaration)

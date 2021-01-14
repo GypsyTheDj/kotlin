@@ -50,12 +50,14 @@ class BuilderFactoryForDuplicateSignatureDiagnostics(
     private val diagnostics: DiagnosticSink,
     moduleName: String,
     languageVersionSettings: LanguageVersionSettings,
+    useOldInlineClassesManglingScheme: Boolean,
     shouldGenerate: (JvmDeclarationOrigin) -> Boolean,
 ) : SignatureCollectingClassBuilderFactory(builderFactory, shouldGenerate) {
 
     private val mapAsmMethod: (FunctionDescriptor) -> Method = KotlinTypeMapper(
         // Avoid errors when some classes are not loaded for some reason
-        bindingContext, ClassBuilderMode.LIGHT_CLASSES, moduleName, languageVersionSettings, isIrBackend = false
+        bindingContext, ClassBuilderMode.LIGHT_CLASSES, moduleName, languageVersionSettings, isIrBackend = false,
+        useOldInlineClassesManglingScheme = useOldInlineClassesManglingScheme
     )::mapAsmMethod
 
     private val reportDiagnosticsTasks = ArrayList<() -> Unit>()
@@ -202,7 +204,7 @@ class BuilderFactoryForDuplicateSignatureDiagnostics(
         fun processMember(member: DeclarationDescriptor?) {
             if (member !is CallableMemberDescriptor) return
             // a member of super is not visible: no override
-            if (member.visibility == Visibilities.INVISIBLE_FAKE) return
+            if (member.visibility == DescriptorVisibilities.INVISIBLE_FAKE) return
             // if a signature clashes with a SAM-adapter or something like that, there's no harm
             if (isOrOverridesSamAdapter(member)) return
 
@@ -231,7 +233,7 @@ class BuilderFactoryForDuplicateSignatureDiagnostics(
         descriptor.getParentJavaStaticClassScope()?.run {
             getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
                     .filter {
-                        it is FunctionDescriptor && Visibilities.isVisibleIgnoringReceiver(it, descriptor)
+                        it is FunctionDescriptor && DescriptorVisibilities.isVisibleIgnoringReceiver(it, descriptor)
                     }
                     .forEach(::processMember)
         }

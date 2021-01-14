@@ -41,6 +41,7 @@ import org.jetbrains.kotlin.kapt3.base.mapJListIndexed
 import org.jetbrains.kotlin.kapt3.base.pairedListToMap
 import org.jetbrains.kotlin.kapt3.base.plus
 import org.jetbrains.kotlin.kapt3.base.stubs.KaptStubLineInformation
+import org.jetbrains.kotlin.kapt3.base.stubs.KotlinPosition
 import org.jetbrains.kotlin.kapt3.base.util.TopLevelJava9Aware
 import org.jetbrains.kotlin.kapt3.javac.KaptJavaFileObject
 import org.jetbrains.kotlin.kapt3.javac.KaptTreeMaker
@@ -60,10 +61,12 @@ import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluat
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
+import org.jetbrains.kotlin.resolve.descriptorUtil.isCompanionObject
 import org.jetbrains.kotlin.resolve.source.PsiSourceElement
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isError
+import org.jetbrains.kotlin.types.typeUtil.isEnum
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
@@ -95,6 +98,8 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
             "kotlin.jvm." // Kotlin annotations from runtime
         )
 
+        private val KOTLIN_METADATA_ANNOTATION = Metadata::class.java.name
+
         private val NON_EXISTENT_CLASS_NAME = FqName("error.NonExistentClass")
 
         private val JAVA_KEYWORD_FILTER_REGEX = "[a-z]+".toRegex()
@@ -107,6 +112,7 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
 
     private val correctErrorTypes = kaptContext.options[KaptFlag.CORRECT_ERROR_TYPES]
     private val strictMode = kaptContext.options[KaptFlag.STRICT]
+    private val stripMetadata = kaptContext.options[KaptFlag.STRIP_METADATA]
 
     private val mutableBindings = mutableMapOf<String, KaptJavaFileObject>()
 
@@ -382,17 +388,27 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
             )
         }
 
-        val fields = mapJList<FieldNode, JCTree>(clazz.fields) {
-            if (it.isEnumValue()) null else convertField(it, clazz, lineMappings, packageFqName)
+        val fieldsPositions = mutableMapOf<JCTree, MemberData>()
+        val fields = mapJList<FieldNode, JCTree>(clazz.fields) { fieldNode ->
+            if (fieldNode.isEnumValue()) {
+                null
+            } else {
+                convertField(fieldNode, clazz, lineMappings, packageFqName)?.also {
+                    fieldsPositions[it] = MemberData(fieldNode.name, fieldNode.desc, lineMappings.getPosition(clazz, fieldNode))
+                }
+            }
         }
 
-        val methods = mapJList<MethodNode, JCTree>(clazz.methods) {
+        val methodsPositions = mutableMapOf<JCTree, MemberData>()
+        val methods = mapJList<MethodNode, JCTree>(clazz.methods) { methodNode ->
             if (isEnum) {
-                if (it.name == "values" && it.desc == "()[L${clazz.name};") return@mapJList null
-                if (it.name == "valueOf" && it.desc == "(Ljava/lang/String;)L${clazz.name};") return@mapJList null
+                if (methodNode.name == "values" && methodNode.desc == "()[L${clazz.name};") return@mapJList null
+                if (methodNode.name == "valueOf" && methodNode.desc == "(Ljava/lang/String;)L${clazz.name};") return@mapJList null
             }
 
-            convertMethod(it, clazz, lineMappings, packageFqName, isInner)
+            convertMethod(methodNode, clazz, lineMappings, packageFqName, isInner)?.also {
+                methodsPositions[it] = MemberData(methodNode.name, methodNode.desc, lineMappings.getPosition(clazz, methodNode))
+            }
         }
 
         val nestedClasses = mapJList<InnerClassNode, JCTree>(clazz.innerClasses) { innerClass ->
@@ -406,14 +422,64 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
 
         val superTypes = calculateSuperTypes(clazz, genericType)
 
+        val classPosition = lineMappings.getPosition(clazz)
+        val sortedFields = JavacList.from(fields.sortedWith(MembersPositionComparator(classPosition, fieldsPositions)))
+        val sortedMethods = JavacList.from(methods.sortedWith(MembersPositionComparator(classPosition, methodsPositions)))
+
         return treeMaker.ClassDef(
             modifiers,
             treeMaker.name(simpleName),
             genericType.typeParameters,
             superTypes.superClass,
             superTypes.interfaces,
-            enumValues + fields + methods + nestedClasses
+            enumValues + sortedFields + sortedMethods + nestedClasses
         ).keepKdocComments(clazz)
+    }
+
+    private class MemberData(val name: String, val descriptor: String, val position: KotlinPosition?)
+
+    /**
+     * Sort class members. If the source file for the class is unknown, just sort using name and descriptor. Otherwise:
+     * - all members in the same source file as the class come first (members may come from other source files)
+     * - members from the class are sorted using their position in the source file
+     * - members from other source files are sorted using their name and descriptor
+     *
+     * More details: Class methods and fields are currently sorted at serialization (see DescriptorSerializer.sort) and at deserialization
+     * (see DeserializedMemberScope.OptimizedImplementation#addMembers). Therefore, the contents of the generated stub files are sorted in
+     * incremental builds but not in clean builds.
+     * The consequence is that the contents of the generated stub files may not be consistent across a clean build and an incremental
+     * build, making the build non-deterministic and dependent tasks run unnecessarily (see KT-40882).
+     */
+    private class MembersPositionComparator(val classSource: KotlinPosition?, val memberData: Map<JCTree, MemberData>) :
+        Comparator<JCTree> {
+        override fun compare(o1: JCTree, o2: JCTree): Int {
+            val data1 = memberData.getValue(o1)
+            val data2 = memberData.getValue(o2)
+            classSource ?: return compareDescriptors(data1, data2)
+
+            val position1 = data1.position
+            val position2 = data2.position
+
+            return if (position1 != null && position1.path == classSource.path) {
+                if (position2 != null && position2.path == classSource.path) {
+                    val positionCompare = position1.pos.compareTo(position2.pos)
+                    if (positionCompare != 0) positionCompare
+                    else compareDescriptors(data1, data2)
+                } else {
+                    -1
+                }
+            } else if (position2 != null && position2.path == classSource.path) {
+                1
+            } else {
+                compareDescriptors(data1, data2)
+            }
+        }
+
+        private fun compareDescriptors(m1: MemberData, m2: MemberData): Int {
+            val nameComparison = m1.name.compareTo(m2.name)
+            if (nameComparison != 0) return nameComparison
+            return m1.descriptor.compareTo(m2.descriptor)
+        }
     }
 
     private class ClassSupertypes(val superClass: JCExpression?, val interfaces: JavacList<JCExpression>)
@@ -665,6 +731,18 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
         }
 
         val propertyType = (origin?.descriptor as? PropertyDescriptor)?.returnType
+
+        /*
+            Work-around for enum classes in companions.
+            In expressions "Foo.Companion.EnumClass", Java prefers static field over a type name, making the reference invalid.
+        */
+        if (propertyType != null && propertyType.isEnum()) {
+            val enumClass = propertyType.constructor.declarationDescriptor
+            if (enumClass is ClassDescriptor && enumClass.isInsideCompanionObject()) {
+                return null
+            }
+        }
+
         if (propertyInitializer != null && propertyType != null) {
             val constValue = getConstantValue(propertyInitializer, propertyType)
             if (constValue != null) {
@@ -681,6 +759,15 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
         }
 
         return null
+    }
+
+    private fun DeclarationDescriptor.isInsideCompanionObject(): Boolean {
+        val parent = containingDeclaration ?: return false
+        if (parent.isCompanionObject()) {
+            return true
+        }
+
+        return parent.isInsideCompanionObject()
     }
 
     private object UnknownConstantValue
@@ -787,6 +874,10 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
                 method.access.toLong(),
             ElementKind.METHOD, packageFqName, visibleAnnotations, method.invisibleAnnotations, descriptor.annotations
         )
+
+        if (containingClass.isInterface() && !method.isAbstract() && !method.isStatic()) {
+            modifiers.flags = modifiers.flags or Flags.DEFAULT
+        }
 
         val asmReturnType = Type.getReturnType(method.desc)
         val jcReturnType = if (isConstructor) null else treeMaker.Type(asmReturnType)
@@ -1063,6 +1154,7 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
 
         if (filtered) {
             if (BLACKLISTED_ANNOTATIONS.any { fqName.startsWith(it) }) return null
+            if (stripMetadata && fqName == KOTLIN_METADATA_ANNOTATION) return null
         }
 
         val ktAnnotation = (annotationDescriptor?.source as? PsiSourceElement)?.psi as? KtAnnotationEntry

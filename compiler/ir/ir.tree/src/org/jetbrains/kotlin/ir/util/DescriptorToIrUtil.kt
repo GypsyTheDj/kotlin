@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.ir.declarations.IrFactory
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
+import org.jetbrains.kotlin.resolve.isInlineClass
 import org.jetbrains.kotlin.types.KotlinType
 
 val ParameterDescriptor.indexOrMinusOne: Int
@@ -27,16 +28,16 @@ val ParameterDescriptor.isNoinline: Boolean
     get() = this is ValueParameterDescriptor && isNoinline
 
 fun IrFactory.createIrClassFromDescriptor(
-    startOffset: Int,
-    endOffset: Int,
-    origin: IrDeclarationOrigin,
-    symbol: IrClassSymbol,
-    descriptor: ClassDescriptor,
-    name: Name = descriptor.name,
-    visibility: Visibility = descriptor.visibility,
-    modality: Modality = descriptor.modality
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrClassSymbol,
+        descriptor: ClassDescriptor,
+        name: Name = descriptor.name,
+        visibility: DescriptorVisibility = descriptor.visibility,
+        modality: Modality = descriptor.modality
 ): IrClass = createClass(
     startOffset, endOffset, origin, symbol, name, descriptor.kind, visibility, modality,
     descriptor.isCompanionObject, descriptor.isInner, descriptor.isData, descriptor.isEffectivelyExternal(),
-    descriptor.isInline, descriptor.isExpect, descriptor.isFun, descriptor.source
+    descriptor.isInlineClass(), descriptor.isExpect, descriptor.isFun, descriptor.source
 )

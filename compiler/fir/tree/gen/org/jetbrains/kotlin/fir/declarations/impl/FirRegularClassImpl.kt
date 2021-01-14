@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -33,6 +33,7 @@ internal class FirRegularClassImpl(
     override val session: FirSession,
     override var resolvePhase: FirResolvePhase,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
     override val annotations: MutableList<FirAnnotationCall>,
     override val typeParameters: MutableList<FirTypeParameterRef>,
     override var status: FirDeclarationStatus,
@@ -44,7 +45,6 @@ internal class FirRegularClassImpl(
     override var companionObject: FirRegularClass?,
     override val superTypeRefs: MutableList<FirTypeRef>,
 ) : FirRegularClass() {
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     override var controlFlowGraphReference: FirControlFlowGraphReference? = null
     override val hasLazyNestedClassifiers: Boolean get() = false
 

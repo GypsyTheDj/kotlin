@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -35,6 +35,7 @@ class FirTypeAliasBuilder : FirTypeParametersOwnerBuilder, FirAnnotationContaine
     lateinit var session: FirSession
     var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
     lateinit var origin: FirDeclarationOrigin
+    var attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     lateinit var status: FirDeclarationStatus
     override val typeParameters: MutableList<FirTypeParameter> = mutableListOf()
     lateinit var name: Name
@@ -48,6 +49,7 @@ class FirTypeAliasBuilder : FirTypeParametersOwnerBuilder, FirAnnotationContaine
             session,
             resolvePhase,
             origin,
+            attributes,
             status,
             typeParameters,
             name,

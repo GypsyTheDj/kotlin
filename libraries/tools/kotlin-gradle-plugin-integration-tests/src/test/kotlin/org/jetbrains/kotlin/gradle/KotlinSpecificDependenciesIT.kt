@@ -8,7 +8,7 @@ package org.jetbrains.kotlin.gradle
 import org.jetbrains.kotlin.gradle.internals.KOTLIN_TEST_MULTIPLATFORM_MODULE_NAME
 import org.jetbrains.kotlin.gradle.util.AGPVersion
 import org.jetbrains.kotlin.gradle.util.modify
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -19,9 +19,7 @@ class KotlinSpecificDependenciesIT : BaseGradleIT() {
         get() = GradleVersionRequired.FOR_MPP_SUPPORT
 
     override fun defaultBuildOptions(): BuildOptions =
-        super.defaultBuildOptions().copy(androidGradlePluginVersion = AGPVersion.v3_6_0, androidHome = KotlinTestUtils.findAndroidSdk())
-
-    private var testBuildRunId = 0
+        super.defaultBuildOptions().copy(androidGradlePluginVersion = AGPVersion.v3_6_0, androidHome = KtTestUtil.findAndroidSdk())
 
     private fun Project.prepare() { // call this when reusing a project after a test, too, in order to remove any added dependencies
         setupWorkingDir()
@@ -286,42 +284,46 @@ class KotlinSpecificDependenciesIT : BaseGradleIT() {
         val expression = """configurations["$configurationName"].toList()"""
         checkPrintedItems(subproject, expression, checkModulesInResolutionResult, checkModulesNotInResolutionResult)
     }
+}
 
-    private fun Project.checkTaskCompileClasspath(
-        taskPath: String,
-        checkModulesInClasspath: List<String> = emptyList(),
-        checkModulesNotInClasspath: List<String> = emptyList()
-    ) {
-        val subproject = taskPath.substringBeforeLast(":").takeIf { it.isNotEmpty() && it != taskPath }
-        val taskName = taskPath.removePrefix(subproject.orEmpty())
-        val expression = """(tasks.getByName("$taskName") as AbstractCompile).classpath.toList()"""
-        checkPrintedItems(subproject, expression, checkModulesInClasspath, checkModulesNotInClasspath)
-    }
+private var testBuildRunId = 0
 
-    private fun Project.checkPrintedItems(
-        subproject: String?,
-        itemsExpression: String,
-        checkAnyItemsContains: List<String>,
-        checkNoItemContains: List<String>
-    ) {
-        setupWorkingDir()
-        val printingTaskName = "printItems${testBuildRunId++}"
-        gradleBuildScript(subproject).appendText(
-            """
-            ${'\n'}
-            tasks.create("$printingTaskName") {
-                doLast {
-                    println("###$printingTaskName" + $itemsExpression)
-                }
+fun BaseGradleIT.Project.checkTaskCompileClasspath(
+    taskPath: String,
+    checkModulesInClasspath: List<String> = emptyList(),
+    checkModulesNotInClasspath: List<String> = emptyList(),
+    isNative: Boolean = false
+) {
+    val subproject = taskPath.substringBeforeLast(":").takeIf { it.isNotEmpty() && it != taskPath }
+    val taskName = taskPath.removePrefix(subproject.orEmpty())
+    val taskClass = if (isNative) "org.jetbrains.kotlin.gradle.tasks.AbstractKotlinNativeCompile<*, *>" else "AbstractCompile"
+    val expression = """(tasks.getByName("$taskName") as $taskClass).${if (isNative) "libraries" else "classpath"}.toList()"""
+    checkPrintedItems(subproject, expression, checkModulesInClasspath, checkModulesNotInClasspath)
+}
+
+private fun BaseGradleIT.Project.checkPrintedItems(
+    subproject: String?,
+    itemsExpression: String,
+    checkAnyItemsContains: List<String>,
+    checkNoItemContains: List<String>
+) = with(testCase) {
+    setupWorkingDir()
+    val printingTaskName = "printItems${testBuildRunId++}"
+    gradleBuildScript(subproject).appendText(
+        """
+        ${'\n'}
+        tasks.create("$printingTaskName") {
+            doLast {
+                println("###$printingTaskName" + $itemsExpression)
             }
-            """.trimIndent()
-        )
-        build("${subproject?.prependIndent(":").orEmpty()}:$printingTaskName") {
-            assertSuccessful()
-            val itemsLine = output.lines().single { "###$printingTaskName" in it }.substringAfter(printingTaskName)
-            val items = itemsLine.removeSurrounding("[", "]").split(", ").toSet()
-            checkAnyItemsContains.forEach { pattern -> assertTrue { items.any { pattern in it } } }
-            checkNoItemContains.forEach { pattern -> assertFalse { items.any { pattern in it } } }
         }
+        """.trimIndent()
+    )
+    build("${subproject?.prependIndent(":").orEmpty()}:$printingTaskName") {
+        assertSuccessful()
+        val itemsLine = output.lines().single { "###$printingTaskName" in it }.substringAfter(printingTaskName)
+        val items = itemsLine.removeSurrounding("[", "]").split(", ").toSet()
+        checkAnyItemsContains.forEach { pattern -> assertTrue { items.any { pattern in it } } }
+        checkNoItemContains.forEach { pattern -> assertFalse { items.any { pattern in it } } }
     }
 }

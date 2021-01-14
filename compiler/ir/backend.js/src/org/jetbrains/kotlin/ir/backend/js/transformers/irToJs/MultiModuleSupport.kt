@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 
-import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.utils.IrNamer
@@ -117,7 +116,6 @@ fun buildCrossModuleReferenceInfo(modules: Iterable<IrModuleFragment>): CrossMod
     return CrossModuleReferenceInfoImpl(map)
 }
 
-@OptIn(ObsoleteDescriptorBasedAPI::class)
 fun breakCrossModuleFieldAccess(
     context: JsIrBackendContext,
     modules: Iterable<IrModuleFragment>
@@ -188,7 +186,7 @@ fun breakCrossModuleFieldAccess(
 
                 return expression.symbol.owner.transformAccess {
                     val getter = getter()
-                    IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, getter.returnType, getter.symbol)
+                    IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, getter.returnType, getter.symbol, getter.typeParameters.size, getter.valueParameters.size)
                 } ?: expression
             }
 
@@ -197,7 +195,7 @@ fun breakCrossModuleFieldAccess(
 
                 return expression.symbol.owner.transformAccess {
                     val setter = setter()
-                    IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, setter.returnType, setter.symbol).apply {
+                    IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, setter.returnType, setter.symbol, setter.typeParameters.size, setter.valueParameters.size).apply {
                         putValueArgument(0, expression.value)
                     }
                 } ?: expression

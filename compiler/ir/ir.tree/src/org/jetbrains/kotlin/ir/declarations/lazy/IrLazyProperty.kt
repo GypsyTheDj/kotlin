@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.ir.declarations.lazy
 
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
@@ -28,7 +28,7 @@ class IrLazyProperty(
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override val descriptor: PropertyDescriptor,
     override val name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override val modality: Modality,
     override val isVar: Boolean,
     override val isConst: Boolean,

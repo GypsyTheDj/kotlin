@@ -18,12 +18,12 @@ package org.jetbrains.kotlin.ir.declarations.persistent
 
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.persistent.carriers.Carrier
 import org.jetbrains.kotlin.ir.declarations.persistent.carriers.PropertyCarrier
-import org.jetbrains.kotlin.ir.descriptors.WrappedPropertyDescriptor
+import org.jetbrains.kotlin.ir.descriptors.toIrBasedDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.name.Name
@@ -34,7 +34,7 @@ internal abstract class PersistentIrPropertyCommon(
     override val endOffset: Int,
     origin: IrDeclarationOrigin,
     override val name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override val isVar: Boolean,
     override val isConst: Boolean,
     override val isLateinit: Boolean,
@@ -114,7 +114,7 @@ internal class PersistentIrProperty(
     origin: IrDeclarationOrigin,
     override val symbol: IrPropertySymbol,
     name: Name,
-    visibility: Visibility,
+    visibility: DescriptorVisibility,
     override val modality: Modality,
     isVar: Boolean,
     isConst: Boolean,
@@ -142,7 +142,7 @@ internal class PersistentIrFakeOverrideProperty(
     endOffset: Int,
     origin: IrDeclarationOrigin,
     name: Name,
-    visibility: Visibility,
+    visibility: DescriptorVisibility,
     override var modality: Modality,
     isVar: Boolean,
     isConst: Boolean,
@@ -165,14 +165,13 @@ internal class PersistentIrFakeOverrideProperty(
 
     @ObsoleteDescriptorBasedAPI
     override val descriptor
-        get() = _symbol?.descriptor ?: WrappedPropertyDescriptor()
+        get() = _symbol?.descriptor ?: this.toIrBasedDescriptor()
 
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun acquireSymbol(symbol: IrPropertySymbol): IrProperty {
         assert(_symbol == null) { "$this already has symbol _symbol" }
         _symbol = symbol
         symbol.bind(this)
-        (symbol.descriptor as? WrappedPropertyDescriptor)?.bind(this)
         return this
     }
 }

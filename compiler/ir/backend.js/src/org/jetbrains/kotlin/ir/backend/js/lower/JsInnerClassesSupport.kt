@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,8 +9,7 @@ import org.jetbrains.kotlin.backend.common.getOrPut
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.backend.common.lower.InnerClassesSupport
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.backend.js.JsMapping
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder.SYNTHESIZED_DECLARATION
 import org.jetbrains.kotlin.ir.backend.js.utils.Namer
@@ -41,7 +40,7 @@ class JsInnerClassesSupport(mapping: JsMapping, private val irFactory: IrFactory
                     origin = InnerClassesSupport.FIELD_FOR_OUTER_THIS
                     name = Name.identifier("\$this")
                     type = outerClass.defaultType
-                    visibility = Visibilities.PROTECTED
+                    visibility = DescriptorVisibilities.PROTECTED
                     isFinal = true
                     isExternal = false
                     isStatic = false
@@ -70,7 +69,6 @@ class JsInnerClassesSupport(mapping: JsMapping, private val irFactory: IrFactory
         return originalInnerClassPrimaryConstructorByClass[innerClass]
     }
 
-    @OptIn(ObsoleteDescriptorBasedAPI::class)
     private fun createInnerClassConstructorWithOuterThisParameter(oldConstructor: IrConstructor): IrConstructor {
         val irClass = oldConstructor.parent as IrClass
         val outerThisType = (irClass.parent as IrClass).defaultType

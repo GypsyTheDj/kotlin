@@ -60,7 +60,7 @@ class FunctionClassDescriptor(
 
     @get:JvmName("hasBigArity")
     val hasBigArity: Boolean
-        get() = arity >= FunctionInvokeDescriptor.BIG_ARITY
+        get() = arity >= BuiltInFunctionArity.BIG_ARITY
 
     override fun getContainingDeclaration() = containingDeclaration
 
@@ -75,12 +75,13 @@ class FunctionClassDescriptor(
     override fun getKind() = ClassKind.INTERFACE
     override fun getModality() = Modality.ABSTRACT
     override fun getUnsubstitutedPrimaryConstructor() = null
-    override fun getVisibility() = Visibilities.PUBLIC
+    override fun getVisibility() = DescriptorVisibilities.PUBLIC
     override fun isCompanionObject() = false
     override fun isInner() = false
     override fun isData() = false
     override fun isInline() = false
     override fun isFun() = false
+    override fun isValue() = false
     override fun isExpect() = false
     override fun isActual() = false
     override fun isExternal() = false

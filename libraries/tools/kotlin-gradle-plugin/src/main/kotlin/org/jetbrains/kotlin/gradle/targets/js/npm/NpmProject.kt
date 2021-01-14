@@ -24,7 +24,7 @@ val KotlinJsCompilation.npmProject: NpmProject
  *
  * More info can be obtained from [KotlinCompilationNpmResolution], which is available after project resolution (after [KotlinNpmInstallTask] execution).
  */
-open class NpmProject(val compilation: KotlinJsCompilation) {
+open class NpmProject(@Transient val compilation: KotlinJsCompilation) {
     val name: String
         get() = buildNpmProjectName()
 
@@ -127,6 +127,12 @@ open class NpmProject(val compilation: KotlinJsCompilation) {
 
         val targetName = if (target.name.isNotEmpty() && target.name.toLowerCase() != "js") {
             target.name
+                .replace(DECAMELIZE_REGEX) {
+                    it.groupValues
+                        .drop(1)
+                        .joinToString(prefix = "-", separator = "-")
+                }
+                .toLowerCase()
         } else null
 
         return sequenceOf(
@@ -146,5 +152,7 @@ open class NpmProject(val compilation: KotlinJsCompilation) {
         const val PRE_PACKAGE_JSON = "pre-package.json"
         const val NODE_MODULES = "node_modules"
         const val DIST_FOLDER = "kotlin"
+
+        private val DECAMELIZE_REGEX = "([A-Z])".toRegex()
     }
 }

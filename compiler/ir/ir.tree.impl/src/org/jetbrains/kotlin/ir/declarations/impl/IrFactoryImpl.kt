@@ -36,7 +36,7 @@ object IrFactoryImpl : IrFactory {
         symbol: IrClassSymbol,
         name: Name,
         kind: ClassKind,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isCompanion: Boolean,
         isInner: Boolean,
@@ -58,7 +58,7 @@ object IrFactoryImpl : IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrConstructorSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         returnType: IrType,
         isInline: Boolean,
         isExternal: Boolean,
@@ -83,7 +83,7 @@ object IrFactoryImpl : IrFactory {
     override fun createErrorDeclaration(
         startOffset: Int,
         endOffset: Int,
-        descriptor: DeclarationDescriptor,
+        descriptor: DeclarationDescriptor?,
     ): IrErrorDeclaration =
         IrErrorDeclarationImpl(startOffset, endOffset, descriptor)
 
@@ -94,7 +94,7 @@ object IrFactoryImpl : IrFactory {
         symbol: IrFieldSymbol,
         name: Name,
         type: IrType,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         isFinal: Boolean,
         isExternal: Boolean,
         isStatic: Boolean,
@@ -107,7 +107,7 @@ object IrFactoryImpl : IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrSimpleFunctionSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         returnType: IrType,
         isInline: Boolean,
@@ -131,7 +131,7 @@ object IrFactoryImpl : IrFactory {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         returnType: IrType,
         isInline: Boolean,
@@ -164,7 +164,7 @@ object IrFactoryImpl : IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrPropertySymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isVar: Boolean,
         isConst: Boolean,
@@ -186,7 +186,7 @@ object IrFactoryImpl : IrFactory {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isVar: Boolean,
         isConst: Boolean,
@@ -205,7 +205,7 @@ object IrFactoryImpl : IrFactory {
         endOffset: Int,
         symbol: IrTypeAliasSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         expandedType: IrType,
         isActual: Boolean,
         origin: IrDeclarationOrigin,
@@ -235,8 +235,12 @@ object IrFactoryImpl : IrFactory {
         varargElementType: IrType?,
         isCrossinline: Boolean,
         isNoinline: Boolean,
+        isHidden: Boolean,
+        isAssignable: Boolean,
     ): IrValueParameter =
-        IrValueParameterImpl(startOffset, endOffset, origin, symbol, name, index, type, varargElementType, isCrossinline, isNoinline)
+        IrValueParameterImpl(
+            startOffset, endOffset, origin, symbol, name, index, type, varargElementType, isCrossinline, isNoinline, isHidden, isAssignable
+        )
 
     override fun createExpressionBody(
         startOffset: Int,

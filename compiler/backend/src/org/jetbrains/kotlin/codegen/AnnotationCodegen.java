@@ -33,6 +33,7 @@ import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.resolve.AnnotationChecker;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
+import org.jetbrains.kotlin.resolve.InlineClassesUtilsKt;
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker;
 import org.jetbrains.kotlin.resolve.constants.*;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
@@ -142,7 +143,7 @@ public abstract class AnnotationCodegen {
                 && !applicableTargets.contains(KotlinTarget.CLASS)
                 && !applicableTargets.contains(KotlinTarget.ANNOTATION_CLASS)) {
                 ClassDescriptor classDescriptor = (ClassDescriptor) annotated;
-                if (classDescriptor.getVisibility() == Visibilities.LOCAL) {
+                if (classDescriptor.getVisibility() == DescriptorVisibilities.LOCAL) {
                     assert applicableTargets.contains(KotlinTarget.EXPRESSION) :
                             "Inconsistent target list for object literal annotation: " + applicableTargets + " on " + annotated;
                     continue;
@@ -221,7 +222,7 @@ public abstract class AnnotationCodegen {
     private static boolean isInvisibleFromTheOutside(@Nullable DeclarationDescriptor descriptor) {
         if (isAccessor(descriptor)) return true;
         if (descriptor instanceof MemberDescriptor) {
-            return AsmUtil.getVisibilityAccessFlag((MemberDescriptor) descriptor) == Opcodes.ACC_PRIVATE;
+            return DescriptorAsmUtil.getVisibilityAccessFlag((MemberDescriptor) descriptor) == Opcodes.ACC_PRIVATE;
         }
         return false;
     }
@@ -497,6 +498,9 @@ public abstract class AnnotationCodegen {
             public Void visitKClassValue(KClassValue value, Void data) {
                 KotlinType classType = value.getArgumentType(module);
                 innerClassConsumer.addInnerClassInfoFromAnnotation(DescriptorUtils.getClassDescriptorForType(classType));
+                if (InlineClassesUtilsKt.isInlineClassType(classType)) {
+                    classType = TypeUtils.makeNullable(classType);
+                }
                 annotationVisitor.visit(name, typeMapper.mapType(classType));
                 return null;
             }

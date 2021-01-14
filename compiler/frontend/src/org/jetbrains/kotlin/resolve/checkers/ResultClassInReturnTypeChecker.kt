@@ -21,7 +21,8 @@ class ResultClassInReturnTypeChecker : DeclarationChecker {
         val languageVersionSettings = context.languageVersionSettings
         if (
             languageVersionSettings.getFlag(AnalysisFlags.allowResultReturnType) ||
-            languageVersionSettings.getFeatureSupport(LanguageFeature.InlineClasses) == LanguageFeature.State.ENABLED &&
+            (languageVersionSettings.getFeatureSupport(LanguageFeature.InlineClasses) == LanguageFeature.State.ENABLED ||
+                    languageVersionSettings.supportsFeature(LanguageFeature.JvmInlineValueClasses)) &&
             languageVersionSettings.supportsFeature(LanguageFeature.AllowResultInReturnType)
         ) return
 
@@ -45,7 +46,7 @@ class ResultClassInReturnTypeChecker : DeclarationChecker {
             }
 
             val visibility = (declarationDescriptor as DeclarationDescriptorWithVisibility).visibility
-            return !Visibilities.isPrivate(visibility) && visibility != Visibilities.LOCAL
+            return !DescriptorVisibilities.isPrivate(visibility) && visibility != DescriptorVisibilities.LOCAL
         }
 
         return true

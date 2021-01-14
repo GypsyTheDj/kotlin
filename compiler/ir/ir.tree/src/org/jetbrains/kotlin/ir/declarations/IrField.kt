@@ -16,13 +16,13 @@ import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
 abstract class IrField :
     IrDeclarationBase(),
-    IrSymbolDeclaration<IrFieldSymbol>,
     IrDeclarationWithName, IrDeclarationWithVisibility, IrDeclarationParent, IrMetadataSourceOwner {
 
     @ObsoleteDescriptorBasedAPI
     abstract override val descriptor: PropertyDescriptor
+    abstract override val symbol: IrFieldSymbol
 
-    abstract val type: IrType
+    abstract var type: IrType
     abstract val isFinal: Boolean
     abstract val isExternal: Boolean
     abstract val isStatic: Boolean

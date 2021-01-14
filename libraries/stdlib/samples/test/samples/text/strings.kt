@@ -1,6 +1,7 @@
 package samples.text
 
 import samples.*
+import java.util.Locale
 import kotlin.test.*
 
 class Strings {
@@ -15,6 +16,15 @@ class Strings {
     fun decapitalize() {
         assertPrints("abcd".decapitalize(), "abcd")
         assertPrints("Abcd".decapitalize(), "abcd")
+    }
+
+    @Sample
+    fun replaceFirstChar() {
+        assertPrints("kotlin".replaceFirstChar { it.uppercase() }, "Kotlin")
+
+        val sentence = "Welcome to Kotlin!"
+        val words = sentence.split(' ');
+        assertPrints(words.joinToString(separator = "_") { word -> word.replaceFirstChar { it.lowercase() } }, "welcome_to_kotlin!")
     }
 
     @Sample
@@ -205,13 +215,27 @@ class Strings {
     }
 
     @Sample
-    fun toLowerCase() {
-        assertPrints("Iced frappé!".toLowerCase(), "iced frappé!")
+    fun lowercase() {
+        assertPrints("Iced frappé!".lowercase(), "iced frappé!")
     }
 
     @Sample
-    fun toUpperCase() {
-        assertPrints("Iced frappé!".toUpperCase(), "ICED FRAPPÉ!")
+    fun lowercaseLocale() {
+        assertPrints("KOTLIN".lowercase(), "kotlin")
+        val turkishLocale = Locale.forLanguageTag("tr")
+        assertPrints("KOTLIN".lowercase(turkishLocale), "kotlın")
+    }
+
+    @Sample
+    fun uppercase() {
+        assertPrints("Iced frappé!".uppercase(), "ICED FRAPPÉ!")
+    }
+
+    @Sample
+    fun uppercaseLocale() {
+        assertPrints("Kotlin".uppercase(), "KOTLIN")
+        val turkishLocale = Locale.forLanguageTag("tr")
+        assertPrints("Kotlin".uppercase(turkishLocale), "KOTLİN")
     }
 
     @Sample
@@ -407,5 +431,27 @@ class Strings {
         assertPrints(matchDetails(inputString, toFind), "Searching for 'ever' in 'Never ever give up' starting at position 0: Found at 1")
         assertPrints(matchDetails(inputString, toFind, 2), "Searching for 'ever' in 'Never ever give up' starting at position 2: Found at 6")
         assertPrints(matchDetails(inputString, toFind, 10), "Searching for 'ever' in 'Never ever give up' starting at position 10: Not found")
+    }
+
+    @Sample
+    fun last() {
+        val string = "Kotlin 1.4.0"
+        assertPrints(string.last(), "0")
+        assertPrints(string.last { it.isLetter() }, "n")
+        assertPrints(string.lastOrNull { it > 'z' }, "null")
+        assertFails { string.last { it > 'z' } }
+
+        val emptyString = ""
+        assertPrints(emptyString.lastOrNull(), "null")
+        assertFails { emptyString.last() }
+    }
+
+    @Sample
+    fun replace() {
+        val inputString0 = "Mississippi"
+        val inputString1 = "Insufficient data for meaningful answer."
+
+        assertPrints(inputString0.replace('s', 'z'), "Mizzizzippi")
+        assertPrints(inputString1.replace("data", "information"), "Insufficient information for meaningful answer.")
     }
 }

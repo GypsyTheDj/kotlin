@@ -65,7 +65,7 @@ public class DescriptorUtils {
 
     public static boolean isDescriptorWithLocalVisibility(DeclarationDescriptor current) {
         return current instanceof DeclarationDescriptorWithVisibility &&
-         ((DeclarationDescriptorWithVisibility) current).getVisibility() == Visibilities.LOCAL;
+         ((DeclarationDescriptorWithVisibility) current).getVisibility() == DescriptorVisibilities.LOCAL;
     }
 
     @NotNull
@@ -270,7 +270,7 @@ public class DescriptorUtils {
     }
 
     public static boolean isSealedClass(@Nullable DeclarationDescriptor descriptor) {
-        return isKindOf(descriptor, ClassKind.CLASS) && ((ClassDescriptor) descriptor).getModality() == Modality.SEALED;
+        return (isKindOf(descriptor, ClassKind.CLASS) || isKindOf(descriptor, ClassKind.INTERFACE)) && ((ClassDescriptor) descriptor).getModality() == Modality.SEALED;
     }
 
     public static boolean isAnonymousObject(@NotNull DeclarationDescriptor descriptor) {
@@ -380,16 +380,26 @@ public class DescriptorUtils {
     }
 
     @NotNull
-    public static Visibility getDefaultConstructorVisibility(@NotNull ClassDescriptor classDescriptor) {
+    public static DescriptorVisibility getDefaultConstructorVisibility(
+            @NotNull ClassDescriptor classDescriptor,
+            boolean freedomForSealedInterfacesSupported
+    ) {
         ClassKind classKind = classDescriptor.getKind();
-        if (classKind == ClassKind.ENUM_CLASS || classKind.isSingleton() || isSealedClass(classDescriptor)) {
-            return Visibilities.PRIVATE;
+        if (classKind == ClassKind.ENUM_CLASS || classKind.isSingleton()) {
+            return DescriptorVisibilities.PRIVATE;
+        }
+        if (isSealedClass(classDescriptor)) {
+            if (freedomForSealedInterfacesSupported) {
+                return DescriptorVisibilities.INTERNAL;
+            } else {
+                return DescriptorVisibilities.PRIVATE;
+            }
         }
         if (isAnonymousObject(classDescriptor)) {
-            return Visibilities.DEFAULT_VISIBILITY;
+            return DescriptorVisibilities.DEFAULT_VISIBILITY;
         }
         assert classKind == ClassKind.CLASS || classKind == ClassKind.INTERFACE || classKind == ClassKind.ANNOTATION_CLASS;
-        return Visibilities.PUBLIC;
+        return DescriptorVisibilities.PUBLIC;
     }
 
     // TODO: should be internal

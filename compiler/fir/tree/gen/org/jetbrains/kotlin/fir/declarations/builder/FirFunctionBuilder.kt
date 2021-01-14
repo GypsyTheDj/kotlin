@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirAnnotationContainerBuilder
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationAttributes
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirFunction
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
@@ -28,6 +29,7 @@ interface FirFunctionBuilder : FirAnnotationContainerBuilder {
     abstract override val annotations: MutableList<FirAnnotationCall>
     abstract var session: FirSession
     abstract var origin: FirDeclarationOrigin
+    abstract var attributes: FirDeclarationAttributes
     abstract var returnTypeRef: FirTypeRef
     abstract val valueParameters: MutableList<FirValueParameter>
     abstract var body: FirBlock?

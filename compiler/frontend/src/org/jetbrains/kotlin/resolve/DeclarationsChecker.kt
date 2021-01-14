@@ -270,7 +270,7 @@ class DeclarationsChecker(
 
         if (declaration is KtPrimaryConstructor &&
             !DescriptorUtils.isAnnotationClass(constructorDescriptor.constructedClass) &&
-            !constructorDescriptor.constructedClass.isInline
+            !constructorDescriptor.constructedClass.isInlineClass()
         ) {
             for (parameter in declaration.valueParameters) {
                 if (parameter.hasValOrVar()) {
@@ -601,7 +601,7 @@ class DeclarationsChecker(
     }
 
     private fun checkPrivateExpectedDeclaration(declaration: KtDeclaration, descriptor: MemberDescriptor) {
-        if (descriptor.isExpect && Visibilities.isPrivate(descriptor.visibility)) {
+        if (descriptor.isExpect && DescriptorVisibilities.isPrivate(descriptor.visibility)) {
             trace.report(EXPECTED_PRIVATE_DECLARATION.on(declaration.modifierList?.getModifier(KtTokens.PRIVATE_KEYWORD) ?: declaration))
         }
     }
@@ -772,7 +772,7 @@ class DeclarationsChecker(
                 if (function.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
                     trace.report(PRIVATE_FUNCTION_WITH_NO_BODY.on(function, functionDescriptor))
                 }
-                if (!hasAbstractModifier && function.hasModifier(KtTokens.OPEN_KEYWORD)) {
+                if (!containingDescriptor.isExpect && !hasAbstractModifier && function.hasModifier(KtTokens.OPEN_KEYWORD)) {
                     trace.report(REDUNDANT_OPEN_IN_INTERFACE.on(function))
                 }
             }
@@ -884,15 +884,15 @@ class DeclarationsChecker(
             }
         } else {
             if (propertyDescriptor.isOverridable
-                && accessorDescriptor.visibility == Visibilities.PRIVATE
-                && propertyDescriptor.visibility != Visibilities.PRIVATE) {
+                && accessorDescriptor.visibility == DescriptorVisibilities.PRIVATE
+                && propertyDescriptor.visibility != DescriptorVisibilities.PRIVATE) {
                 if (propertyDescriptor.modality == Modality.ABSTRACT) {
                     reportVisibilityModifierDiagnostics(tokens.values, Errors.PRIVATE_SETTER_FOR_ABSTRACT_PROPERTY)
                 } else {
                     reportVisibilityModifierDiagnostics(tokens.values, Errors.PRIVATE_SETTER_FOR_OPEN_PROPERTY)
                 }
             } else {
-                val compare = Visibilities.compare(accessorDescriptor.visibility, propertyDescriptor.visibility)
+                val compare = DescriptorVisibilities.compare(accessorDescriptor.visibility, propertyDescriptor.visibility)
                 if (compare == null || compare > 0) {
                     reportVisibilityModifierDiagnostics(tokens.values, Errors.SETTER_VISIBILITY_INCONSISTENT_WITH_PROPERTY_VISIBILITY)
                 }

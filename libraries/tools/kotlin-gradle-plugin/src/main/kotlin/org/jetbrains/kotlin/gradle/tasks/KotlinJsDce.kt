@@ -40,6 +40,9 @@ open class KotlinJsDce : AbstractKotlinCompileTool<K2JSDceArguments>(), KotlinJs
         cacheOnlyIfEnabledForKotlin()
     }
 
+    @get:Internal
+    internal val objects = project.objects
+
     override fun localStateDirectories(): FileCollection = project.files()
 
     override fun createCompilerArgs(): K2JSDceArguments = K2JSDceArguments()
@@ -68,11 +71,14 @@ open class KotlinJsDce : AbstractKotlinCompileTool<K2JSDceArguments>(), KotlinJs
         keep += fqn
     }
 
+    @Input
+    var jvmArgs = mutableListOf<String>()
+
     @TaskAction
     fun performDce() {
         val inputFiles = (listOf(source) + classpath
             .filter { !kotlinFilesOnly || isDceCandidate(it) }
-            .map { project.fileTree(it) })
+            .map { objects.fileCollection().from(it).asFileTree })
             .reduce(FileTree::plus)
             .files.map { it.path }
 
@@ -88,7 +94,8 @@ open class KotlinJsDce : AbstractKotlinCompileTool<K2JSDceArguments>(), KotlinJs
             K2JSDce::class.java.name,
             computedCompilerClasspath,
             log,
-            project.buildDir
+            project.buildDir,
+            jvmArgs
         )
         throwGradleExceptionIfError(exitCode)
 

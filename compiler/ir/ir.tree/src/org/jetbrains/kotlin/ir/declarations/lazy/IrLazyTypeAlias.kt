@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.ir.declarations.lazy
 
 import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
@@ -24,7 +24,7 @@ class IrLazyTypeAlias(
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override val descriptor: TypeAliasDescriptor,
     override val name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override val isActual: Boolean,
     override val stubGenerator: DeclarationStubGenerator,
     override val typeTranslator: TypeTranslator,
@@ -43,7 +43,7 @@ class IrLazyTypeAlias(
         }
     }
 
-    override val expandedType: IrType by lazy {
+    override var expandedType: IrType by lazyVar {
         withInitialIr {
             typeTranslator.buildWithScope(this) {
                 descriptor.expandedType.toIrType()

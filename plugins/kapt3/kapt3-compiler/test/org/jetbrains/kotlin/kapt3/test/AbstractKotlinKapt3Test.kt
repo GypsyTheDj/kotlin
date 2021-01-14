@@ -33,7 +33,10 @@ import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
-import org.jetbrains.kotlin.codegen.*
+import org.jetbrains.kotlin.codegen.ClassBuilderMode
+import org.jetbrains.kotlin.codegen.CodegenTestFiles
+import org.jetbrains.kotlin.codegen.GenerationUtils
+import org.jetbrains.kotlin.codegen.OriginCollectingClassBuilderFactory
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
 import org.jetbrains.kotlin.kapt.base.test.JavaKaptContextTest
 import org.jetbrains.kotlin.kapt3.Kapt3ComponentRegistrar.KaptComponentContributor
@@ -51,6 +54,8 @@ import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
 import org.jetbrains.kotlin.resolve.jvm.extensions.PartialAnalysisHandlerExtension
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.TestJdkKind
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.jetbrains.kotlin.test.util.trimTrailingWhitespacesAndAddNewlineAtEOF
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstance
@@ -84,7 +89,7 @@ abstract class AbstractKotlinKapt3Test : KotlinKapt3TestBase() {
         val project = myEnvironment.project
         val psiManager = PsiManager.getInstance(project)
 
-        val tmpDir = KotlinTestUtils.tmpDir("kaptTest")
+        val tmpDir = KtTestUtil.tmpDir("kaptTest")
 
         val ktFiles = ArrayList<KtFile>(files.size)
         for (file in files.sorted()) {
@@ -101,7 +106,9 @@ abstract class AbstractKotlinKapt3Test : KotlinKapt3TestBase() {
     }
 
     override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
-        createEnvironmentWithMockJdkAndIdeaAnnotations(ConfigurationKind.ALL, *listOfNotNull(writeJavaFiles(files)).toTypedArray())
+        val javaSourceRoots = listOfNotNull(writeJavaFiles(files))
+        createEnvironmentWithMockJdkAndIdeaAnnotations(ConfigurationKind.ALL, files, TestJdkKind.MOCK_JDK, *javaSourceRoots.toTypedArray())
+
         addAnnotationProcessingRuntimeLibrary(myEnvironment)
 
         val project = myEnvironment.project
@@ -116,7 +123,7 @@ abstract class AbstractKotlinKapt3Test : KotlinKapt3TestBase() {
             projectBaseDir = project.basePath?.let { File(it) }
             compileClasspath.addAll(PathUtil.getJdkClassesRootsFromCurrentJre() + PathUtil.kotlinPathsForIdeaPlugin.stdlibPath)
 
-            sourcesOutputDir = KotlinTestUtils.tmpDir("kaptRunner")
+            sourcesOutputDir = KtTestUtil.tmpDir("kaptRunner")
             classesOutputDir = sourcesOutputDir
             stubsOutputDir = sourcesOutputDir
             incrementalDataOutputDir = sourcesOutputDir
@@ -212,7 +219,8 @@ abstract class AbstractKotlinKapt3Test : KotlinKapt3TestBase() {
         kaptContext: KaptContextForStubGeneration,
         javaFiles: List<File>,
         txtFile: File,
-            wholeFile: File)
+        wholeFile: File
+    )
 }
 
 open class AbstractClassFileToSourceStubConverterTest : AbstractKotlinKapt3Test(), CustomJdkTestLauncher {
@@ -243,6 +251,22 @@ open class AbstractClassFileToSourceStubConverterTest : AbstractKotlinKapt3Test(
     fun testSuppressWarning() {}
 
     override fun doTest(filePath: String) {
+        val wholeFile = File(filePath)
+
+        kaptFlags.add(KaptFlag.MAP_DIAGNOSTIC_LOCATIONS)
+
+        if (wholeFile.isOptionSet("CORRECT_ERROR_TYPES")) {
+            kaptFlags.add(KaptFlag.CORRECT_ERROR_TYPES)
+        }
+
+        if (wholeFile.isOptionSet("STRICT_MODE")) {
+            kaptFlags.add(KaptFlag.STRICT)
+        }
+
+        if (wholeFile.isOptionSet("STRIP_METADATA")) {
+            kaptFlags.add(KaptFlag.STRIP_METADATA)
+        }
+
         super.doTest(filePath)
         doTestWithJdk9(AbstractClassFileToSourceStubConverterTest::class.java, filePath)
         doTestWithJdk11(AbstractClassFileToSourceStubConverterTest::class.java, filePath)

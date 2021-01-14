@@ -11,6 +11,8 @@ import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.symbols.CallableId
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.idea.fir.low.level.api.IndexHelper
 import org.jetbrains.kotlin.idea.fir.low.level.api.PackageExistenceChecker
 import org.jetbrains.kotlin.idea.fir.low.level.api.file.builder.FirFileBuilder
@@ -37,7 +39,7 @@ internal class FirProviderHelper(
                     ?: indexHelper.typeAliasFromIndexByClassId(classId)
                     ?: return@computeIfAbsent Optional.empty()
                 if (ktClass is KtEnumEntry) return@computeIfAbsent Optional.empty()
-                val firFile = firFileBuilder.buildRawFirFileWithCaching(ktClass.containingKtFile, cache)
+                val firFile = firFileBuilder.buildRawFirFileWithCaching(ktClass.containingKtFile, cache, lazyBodiesMode = true)
                 val classifier = FirElementFinder.findElementIn<FirClassLikeDeclaration<*>>(firFile) { classifier ->
                     classifier.symbol.classId == classId
                 }
@@ -59,12 +61,20 @@ internal class FirProviderHelper(
                 @OptIn(ExperimentalStdlibApi::class)
                 buildList {
                     files.forEach { ktFile ->
-                        val firFile = firFileBuilder.buildRawFirFileWithCaching(ktFile, cache)
+                        val firFile = firFileBuilder.buildRawFirFileWithCaching(ktFile, cache, lazyBodiesMode = true)
                         firFile.collectCallableDeclarationsTo(this, name)
                     }
                 }
             }
         }
+    }
+
+    fun getTopLevelFunctionSymbols(packageFqName: FqName, name: Name): List<FirNamedFunctionSymbol> {
+        return getTopLevelCallableSymbols(packageFqName, name).filterIsInstance<FirNamedFunctionSymbol>()
+    }
+
+    fun getTopLevelPropertySymbols(packageFqName: FqName, name: Name): List<FirPropertySymbol> {
+        return getTopLevelCallableSymbols(packageFqName, name).filterIsInstance<FirPropertySymbol>()
     }
 
     private fun FirFile.collectCallableDeclarationsTo(list: MutableList<FirCallableSymbol<*>>, name: Name) {

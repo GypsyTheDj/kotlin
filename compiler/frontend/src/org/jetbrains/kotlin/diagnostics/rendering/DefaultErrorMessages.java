@@ -11,9 +11,9 @@ import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.config.LanguageVersion;
-import org.jetbrains.kotlin.diagnostics.Diagnostic;
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory;
 import org.jetbrains.kotlin.diagnostics.Errors;
+import org.jetbrains.kotlin.diagnostics.UnboundDiagnostic;
 import org.jetbrains.kotlin.metadata.deserialization.VersionRequirement;
 import org.jetbrains.kotlin.resolve.VarianceConflictDiagnosticData;
 import org.jetbrains.kotlin.types.KotlinTypeKt;
@@ -46,7 +46,7 @@ public class DefaultErrorMessages {
 
     @NotNull
     @SuppressWarnings("unchecked")
-    public static String render(@NotNull Diagnostic diagnostic) {
+    public static String render(@NotNull UnboundDiagnostic diagnostic) {
         DiagnosticRenderer renderer = getRendererForDiagnostic(diagnostic);
         if (renderer != null) {
             return renderer.render(diagnostic);
@@ -55,7 +55,7 @@ public class DefaultErrorMessages {
     }
 
     @Nullable
-    public static DiagnosticRenderer getRendererForDiagnostic(@NotNull Diagnostic diagnostic) {
+    public static DiagnosticRenderer getRendererForDiagnostic(@NotNull UnboundDiagnostic diagnostic) {
         DiagnosticRenderer<?> renderer = AddToStdlibKt.firstNotNullResult(RENDERER_MAPS, map -> map.get(diagnostic.getFactory()));
         if (renderer != null)
             return renderer;
@@ -269,6 +269,9 @@ public class DefaultErrorMessages {
         MAP.put(USELESS_VARARG_ON_PARAMETER, "Vararg on this parameter is useless");
         MAP.put(MULTIPLE_VARARG_PARAMETERS, "Multiple vararg-parameters are prohibited");
         MAP.put(FORBIDDEN_VARARG_PARAMETER_TYPE, "Forbidden vararg parameter type: {0}", RENDER_TYPE);
+        MAP.put(CHANGING_ARGUMENTS_EXECUTION_ORDER_FOR_NAMED_VARARGS, "Arguments execution order is going to be changed in a future release. " +
+                                                                      "The expression for named vararg argument will be executed in the order in which it was listed, not at the end. " +
+                                                                      "See KT-17691 for more details.");
 
         MAP.put(EXPECTED_DECLARATION_WITH_BODY, "Expected declaration must not have a body");
         MAP.put(EXPECTED_CLASS_CONSTRUCTOR_DELEGATION_CALL, "Explicit delegation call for constructor of an expected class is not allowed");
@@ -397,7 +400,8 @@ public class DefaultErrorMessages {
         MAP.put(MISSING_IMPORTED_SCRIPT_PSI, "Imported script file ''{0}'' is not loaded. Check your script imports", TO_STRING);
         MAP.put(MISSING_SCRIPT_PROVIDED_PROPERTY_CLASS, "Cannot access script provided property class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
         MAP.put(PRE_RELEASE_CLASS, "{0} is compiled by a pre-release version of Kotlin and cannot be loaded by this version of the compiler", TO_STRING);
-        MAP.put(IR_COMPILED_CLASS, "{0} is compiled by a new Kotlin compiler backend and cannot be loaded by the old compiler", TO_STRING);
+        MAP.put(IR_WITH_UNSTABLE_ABI_COMPILED_CLASS, "{0} is compiled by an unstable version of the Kotlin compiler and cannot be loaded by this compiler", TO_STRING);
+        MAP.put(FIR_COMPILED_CLASS, "{0} is compiled by the new Kotlin compiler frontend and cannot be loaded by the old compiler", TO_STRING);
         MAP.put(INCOMPATIBLE_CLASS,
                 "{0} was compiled with an incompatible version of Kotlin. {1}",
                 TO_STRING,
@@ -509,6 +513,7 @@ public class DefaultErrorMessages {
 
         MAP.put(UNDERSCORE_IS_RESERVED, "Names _, __, ___, ..., are reserved in Kotlin");
         MAP.put(UNDERSCORE_USAGE_WITHOUT_BACKTICKS, "Names _, __, ___, ... can be used only in back-ticks (`_`, `__`, `___`, ...)");
+        MAP.put(RESOLVED_TO_UNDERSCORE_NAMED_CATCH_PARAMETER, "Referencing to an underscore-named parameter is deprecated. It will be an error in a future release.");
         MAP.put(YIELD_IS_RESERVED, "{0}", STRING);
         MAP.put(INVALID_CHARACTERS, "Name {0}", STRING);
 
@@ -627,6 +632,9 @@ public class DefaultErrorMessages {
         MAP.put(DATA_CLASS_CANNOT_HAVE_CLASS_SUPERTYPES, "Data class inheritance from other classes is forbidden");
         MAP.put(SEALED_SUPERTYPE, "This type is sealed, so it can be inherited by only its own nested classes or objects");
         MAP.put(SEALED_SUPERTYPE_IN_LOCAL_CLASS, "Local class cannot extend a sealed class");
+        MAP.put(SEALED_INHERITOR_IN_DIFFERENT_PACKAGE, "Inheritor of sealed class or interface declared in package {0} but it must be in package {1} where base class is declared", TO_STRING, TO_STRING);
+        MAP.put(SEALED_INHERITOR_IN_DIFFERENT_MODULE, "Inheritance of sealed classes or interfaces from different module is prohibited");
+        MAP.put(CLASS_INHERITS_JAVA_SEALED_CLASS, "Inheritance of java sealed classes is prohibited");
         MAP.put(SINGLETON_IN_SUPERTYPE, "Cannot inherit from a singleton");
         MAP.put(CLASS_CANNOT_BE_EXTENDED_DIRECTLY, "Class {0} cannot be extended directly", NAME);
 
@@ -634,6 +642,7 @@ public class DefaultErrorMessages {
         MAP.put(CONSTRUCTOR_IN_OBJECT, "Constructors are not allowed for objects");
         MAP.put(SUPERTYPE_INITIALIZED_WITHOUT_PRIMARY_CONSTRUCTOR, "Supertype initialization is impossible without primary constructor");
         MAP.put(PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED, "Primary constructor call expected");
+        MAP.put(PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED_IN_ENUM, "Primary constructor call expected. It's going to be an error in 1.5.");
         MAP.put(DELEGATION_SUPER_CALL_IN_ENUM_CONSTRUCTOR, "Call to super is not allowed in enum constructor");
         MAP.put(PRIMARY_CONSTRUCTOR_REQUIRED_FOR_DATA_CLASS, "Primary constructor required for data class");
         MAP.put(EXPLICIT_DELEGATION_CALL_REQUIRED,
@@ -697,14 +706,13 @@ public class DefaultErrorMessages {
         MAP.put(NON_PRIVATE_CONSTRUCTOR_IN_ENUM, "Constructor must be private in enum class");
         MAP.put(NON_PRIVATE_CONSTRUCTOR_IN_SEALED, "Constructor must be private in sealed class");
 
-        MAP.put(INLINE_CLASS_NOT_TOP_LEVEL, "Inline classes are only allowed on top level");
+        MAP.put(INLINE_CLASS_NOT_TOP_LEVEL, "Inline classes cannot be local or inner");
         MAP.put(INLINE_CLASS_NOT_FINAL, "Inline classes can be only final");
         MAP.put(ABSENCE_OF_PRIMARY_CONSTRUCTOR_FOR_INLINE_CLASS, "Primary constructor is required for inline class");
-        MAP.put(NON_PUBLIC_PRIMARY_CONSTRUCTOR_OF_INLINE_CLASS, "Primary constructor of inline class must be public");
         MAP.put(INLINE_CLASS_CONSTRUCTOR_WRONG_PARAMETERS_SIZE, "Inline class must have exactly one primary constructor parameter");
-        MAP.put(INLINE_CLASS_CONSTRUCTOR_NOT_FINAL_READ_ONLY_PARAMETER, "Inline class primary constructor must have only final read-only (val) property parameter");
-        MAP.put(INLINE_CLASS_WITH_INITIALIZER, "Inline class cannot have an initializer block");
+        MAP.put(INLINE_CLASS_CONSTRUCTOR_NOT_FINAL_READ_ONLY_PARAMETER, "Value class primary constructor must have only final read-only (val) property parameter");
         MAP.put(PROPERTY_WITH_BACKING_FIELD_INSIDE_INLINE_CLASS, "Inline class cannot have properties with backing fields");
+        MAP.put(RESERVED_VAR_PROPERTY_OF_VALUE_CLASS, "'var' properties with value class receivers are reserved for future use");
         MAP.put(DELEGATED_PROPERTY_INSIDE_INLINE_CLASS, "Inline class cannot have delegated properties");
         MAP.put(INLINE_CLASS_HAS_INAPPLICABLE_PARAMETER_TYPE, "Inline class cannot have value parameter of type ''{0}''", RENDER_TYPE);
         MAP.put(INLINE_CLASS_CANNOT_IMPLEMENT_INTERFACE_BY_DELEGATION, "Inline class cannot implement an interface by delegation");
@@ -712,6 +720,8 @@ public class DefaultErrorMessages {
         MAP.put(INLINE_CLASS_CANNOT_BE_RECURSIVE, "Inline class cannot be recursive");
         MAP.put(RESERVED_MEMBER_INSIDE_INLINE_CLASS, "Member with the name ''{0}'' is reserved for future releases", STRING);
         MAP.put(SECONDARY_CONSTRUCTOR_WITH_BODY_INSIDE_INLINE_CLASS, "Secondary constructors with bodies are reserved for for future releases");
+        MAP.put(INNER_CLASS_INSIDE_INLINE_CLASS, "Inline class cannot have inner classes");
+        MAP.put(VALUE_CLASS_CANNOT_BE_CLONEABLE, "Value class cannot be Cloneable");
 
         MAP.put(RESULT_CLASS_IN_RETURN_TYPE, "'kotlin.Result' cannot be used as a return type");
         MAP.put(RESULT_CLASS_WITH_NULLABLE_OPERATOR, "Expression of type 'kotlin.Result' cannot be used as a left operand of ''{0}''", STRING);
@@ -889,6 +899,7 @@ public class DefaultErrorMessages {
         MAP.put(TYPE_INFERENCE_UPPER_BOUND_VIOLATED, "{0}", TYPE_INFERENCE_UPPER_BOUND_VIOLATED_RENDERER);
         MAP.put(TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH, "Type inference failed. Expected type mismatch: inferred type is {1} but {0} was expected", RENDER_TYPE, RENDER_TYPE);
         MAP.put(TYPE_INFERENCE_CANDIDATE_WITH_SAM_AND_VARARG, "Please use spread operator to pass an array as vararg. It will be an error in 1.5.");
+        MAP.put(TYPE_INFERENCE_POSTPONED_VARIABLE_IN_RECEIVER_TYPE, "Postponed type variable (type variable of the builder inference) can't be used in the receiver type. Use a member function instead of extension one or specify type arguments of a function which uses the builder inference, explicitly.");
 
         MAP.put(TYPE_INFERENCE_FAILED_ON_SPECIAL_CONSTRUCT, "Type inference for control flow expression failed. Please specify its type explicitly.");
 
@@ -1012,9 +1023,12 @@ public class DefaultErrorMessages {
         MAP.put(INLINE_PROPERTY_WITH_BACKING_FIELD, "Inline property cannot have backing field");
         MAP.put(NON_INTERNAL_PUBLISHED_API, "@PublishedApi annotation is only applicable for internal declaration");
         MAP.put(PROTECTED_CALL_FROM_PUBLIC_INLINE, "Protected function call from public-API inline function is deprecated", NAME);
+        MAP.put(PROTECTED_CONSTRUCTOR_CALL_FROM_PUBLIC_INLINE, "Protected constructor call from public-API inline function is deprecated", NAME);
         MAP.put(PROTECTED_CALL_FROM_PUBLIC_INLINE_ERROR, "Protected function call from public-API inline function is prohibited", NAME);
         MAP.put(INVALID_DEFAULT_FUNCTIONAL_PARAMETER_FOR_INLINE, "Invalid default value for inline parameter: ''{0}''. Only lambdas, anonymous functions, and callable references are supported", ELEMENT_TEXT, SHORT_NAMES_IN_TYPES);
         MAP.put(NOT_SUPPORTED_INLINE_PARAMETER_IN_INLINE_PARAMETER_DEFAULT_VALUE, "Usage of inline parameter ''{0}'' in default value for another inline parameter is not supported", ELEMENT_TEXT, SHORT_NAMES_IN_TYPES);
+        MAP.put(PRIVATE_INLINE_FUNCTIONS_RETURNING_ANONYMOUS_OBJECTS, "Return type of the private inline function can't be anonymous. It will be approximated to Any in 1.5." +
+                                                                      "See https://youtrack.jetbrains.com/issue/KT-33917 for more details");
         //Inline non locals
         MAP.put(NON_LOCAL_RETURN_NOT_ALLOWED, "Can''t inline ''{0}'' here: it may contain non-local returns. Add ''crossinline'' modifier to parameter declaration ''{0}''", ELEMENT_TEXT);
         MAP.put(INLINE_CALL_CYCLE, "The ''{0}'' invocation is a part of inline cycle", NAME);
@@ -1024,8 +1038,8 @@ public class DefaultErrorMessages {
         MAP.put(ILLEGAL_SUSPEND_PROPERTY_ACCESS, "Suspend property ''{0}'' should be accessed only from a coroutine or suspend function", NAME);
         MAP.put(ILLEGAL_RESTRICTED_SUSPENDING_FUNCTION_CALL, "Restricted suspending functions can only invoke member or extension suspending functions on their restricted coroutine scope");
         MAP.put(NON_MODIFIER_FORM_FOR_BUILT_IN_SUSPEND, "''suspend'' function can only be called in a form of modifier of a lambda: suspend { ... }");
-        MAP.put(IMPLICIT_NOTHING_TYPE_ARGUMENT_IN_RETURN_POSITION, "Returning type parameter has been inferred to Nothing implicitly. Please, specify type arguments explicitly to hide this warning. Nothing can produce an exception at runtime.");
-        MAP.put(IMPLICIT_NOTHING_TYPE_ARGUMENT_AGAINST_NOT_NOTHING_EXPECTED_TYPE, "Returning type parameter has been inferred to Nothing implicitly because Nothing is more specific than specified expected type. Please specify type arguments explicitly in accordance with expected type to hide this warning. Nothing can produce an exception at runtime.");
+        MAP.put(IMPLICIT_NOTHING_TYPE_ARGUMENT_IN_RETURN_POSITION, "Returning type parameter has been inferred to Nothing implicitly. Please specify type arguments explicitly to hide this warning. Nothing can produce an exception at runtime.");
+        MAP.put(IMPLICIT_NOTHING_TYPE_ARGUMENT_AGAINST_NOT_NOTHING_EXPECTED_TYPE, "Returning type parameter has been inferred to Nothing implicitly because Nothing is more specific than specified expected type. Please specify type arguments explicitly in accordance with expected type to hide this warning. Nothing can produce an exception at runtime. See KT-36776 for more details.");
         MAP.put(RETURN_FOR_BUILT_IN_SUSPEND, "Using implicit label for this lambda is prohibited");
         MAP.put(MODIFIER_FORM_FOR_NON_BUILT_IN_SUSPEND, "Calls having a form of ''suspend {}'' are deprecated because ''suspend'' in the context will have a meaning of a modifier. Add empty argument list to the call: ''suspend() { ... }''");
 

@@ -8,27 +8,28 @@ package org.jetbrains.kotlin.fir.resolve.providers.impl
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.ThreadSafeMutableState
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.synthetic.FirSyntheticProperty
+import org.jetbrains.kotlin.fir.originalIfFakeOverride
 import org.jetbrains.kotlin.fir.resolve.providers.FirProvider
 import org.jetbrains.kotlin.fir.resolve.providers.FirProviderInternals
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProviderInternals
 import org.jetbrains.kotlin.fir.scopes.KotlinScopeProvider
 import org.jetbrains.kotlin.fir.symbols.CallableId
-import org.jetbrains.kotlin.fir.symbols.impl.FirAccessorSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.visitors.FirDefaultVisitor
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
+@ThreadSafeMutableState
 class FirProviderImpl(val session: FirSession, val kotlinScopeProvider: KotlinScopeProvider) : FirProvider() {
     override val symbolProvider: FirSymbolProvider = SymbolProvider()
 
     override fun getFirCallableContainerFile(symbol: FirCallableSymbol<*>): FirFile? {
-        symbol.overriddenSymbol?.let {
+        symbol.originalIfFakeOverride()?.let {
             return getFirCallableContainerFile(it)
         }
         if (symbol is FirAccessorSymbol) {
@@ -57,13 +58,21 @@ class FirProviderImpl(val session: FirSession, val kotlinScopeProvider: KotlinSc
             return getFirClassifierByFqName(classId)?.symbol
         }
 
-        override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<FirCallableSymbol<*>> {
-            return (state.callableMap[CallableId(packageFqName, null, name)] ?: emptyList())
+        @FirSymbolProviderInternals
+        override fun getTopLevelCallableSymbolsTo(destination: MutableList<FirCallableSymbol<*>>, packageFqName: FqName, name: Name) {
+            destination += (state.functionMap[CallableId(packageFqName, null, name)] ?: emptyList())
+            destination += (state.propertyMap[CallableId(packageFqName, null, name)] ?: emptyList())
+
         }
 
         @FirSymbolProviderInternals
-        override fun getTopLevelCallableSymbolsTo(destination: MutableList<FirCallableSymbol<*>>, packageFqName: FqName, name: Name) {
-            destination += getTopLevelCallableSymbols(packageFqName, name)
+        override fun getTopLevelFunctionSymbolsTo(destination: MutableList<FirNamedFunctionSymbol>, packageFqName: FqName, name: Name) {
+            destination += (state.functionMap[CallableId(packageFqName, null, name)] ?: emptyList())
+        }
+
+        @FirSymbolProviderInternals
+        override fun getTopLevelPropertySymbolsTo(destination: MutableList<FirPropertySymbol>, packageFqName: FqName, name: Name) {
+            destination += (state.propertyMap[CallableId(packageFqName, null, name)] ?: emptyList())
         }
 
         override fun getPackage(fqName: FqName): FqName? {
@@ -118,28 +127,47 @@ class FirProviderImpl(val session: FirSession, val kotlinScopeProvider: KotlinSc
             state.classifierContainerFileMap[classId] = file
         }
 
-        override fun <F : FirCallableDeclaration<F>> visitCallableDeclaration(callableDeclaration: FirCallableDeclaration<F>, data: Pair<State, FirFile>) {
-            val symbol = callableDeclaration.symbol
+        override fun visitPropertyAccessor(
+            propertyAccessor: FirPropertyAccessor,
+            data: Pair<State, FirFile>
+        ) {
+            val symbol = propertyAccessor.symbol
+            val (state, file) = data
+            state.callableContainerMap[symbol] = file
+        }
+
+        private inline fun <reified D : FirCallableMemberDeclaration<D>, S : FirCallableSymbol<D>> registerCallable(
+            symbol: S,
+            data: Pair<State, FirFile>,
+            map: MutableMap<CallableId, List<S>>
+        ) {
             val callableId = symbol.callableId
             val (state, file) = data
-            state.callableMap.merge(callableId, listOf(symbol)) { a, b -> a + b }
+            map.merge(callableId, listOf(symbol)) { a, b -> a + b }
             state.callableContainerMap[symbol] = file
         }
 
         override fun visitConstructor(constructor: FirConstructor, data: Pair<State, FirFile>) {
-            visitCallableDeclaration(constructor, data)
+            val symbol = constructor.symbol
+            registerCallable(symbol, data, data.first.constructorMap)
         }
 
         override fun visitSimpleFunction(simpleFunction: FirSimpleFunction, data: Pair<State, FirFile>) {
-            visitCallableDeclaration(simpleFunction, data)
+            val symbol = simpleFunction.symbol
+            registerCallable(symbol, data, data.first.functionMap)
         }
 
         override fun visitProperty(property: FirProperty, data: Pair<State, FirFile>) {
-            visitCallableDeclaration(property, data)
+            val symbol = property.symbol
+            registerCallable(symbol, data, data.first.propertyMap)
+            property.getter?.let { visitPropertyAccessor(it, data) }
+            property.setter?.let { visitPropertyAccessor(it, data) }
         }
 
         override fun visitEnumEntry(enumEntry: FirEnumEntry, data: Pair<State, FirFile>) {
-            visitCallableDeclaration(enumEntry, data)
+            val symbol = enumEntry.symbol
+            val (state, file) = data
+            state.callableContainerMap[symbol] = file
         }
     }
 
@@ -150,20 +178,26 @@ class FirProviderImpl(val session: FirSession, val kotlinScopeProvider: KotlinSc
         val classifierMap = mutableMapOf<ClassId, FirClassLikeDeclaration<*>>()
         val classifierContainerFileMap = mutableMapOf<ClassId, FirFile>()
         val classesInPackage = mutableMapOf<FqName, MutableSet<Name>>()
-        val callableMap = mutableMapOf<CallableId, List<FirCallableSymbol<*>>>()
+        val functionMap = mutableMapOf<CallableId, List<FirNamedFunctionSymbol>>()
+        val propertyMap = mutableMapOf<CallableId, List<FirPropertySymbol>>()
+        val constructorMap = mutableMapOf<CallableId, List<FirConstructorSymbol>>()
         val callableContainerMap = mutableMapOf<FirCallableSymbol<*>, FirFile>()
 
         fun setFrom(other: State) {
             fileMap.clear()
             classifierMap.clear()
             classifierContainerFileMap.clear()
-            callableMap.clear()
+            functionMap.clear()
+            propertyMap.clear()
+            constructorMap.clear()
             callableContainerMap.clear()
 
             fileMap.putAll(other.fileMap)
             classifierMap.putAll(other.classifierMap)
             classifierContainerFileMap.putAll(other.classifierContainerFileMap)
-            callableMap.putAll(other.callableMap)
+            functionMap.putAll(other.functionMap)
+            propertyMap.putAll(other.propertyMap)
+            constructorMap.putAll(other.constructorMap)
             callableContainerMap.putAll(other.callableContainerMap)
             classesInPackage.putAll(other.classesInPackage)
         }
@@ -238,7 +272,9 @@ class FirProviderImpl(val session: FirSession, val kotlinScopeProvider: KotlinSc
         checkMMapDiff("fileMap", state.fileMap, newState.fileMap)
         checkMapDiff("classifierMap", state.classifierMap, newState.classifierMap)
         checkMapDiff("classifierContainerFileMap", state.classifierContainerFileMap, newState.classifierContainerFileMap)
-        checkMMapDiff("callableMap", state.callableMap, newState.callableMap)
+        checkMMapDiff("callableMap", state.functionMap, newState.functionMap)
+        checkMMapDiff("callableMap", state.propertyMap, newState.propertyMap)
+        checkMMapDiff("callableMap", state.constructorMap, newState.constructorMap)
         checkMapDiff("callableContainerMap", state.callableContainerMap, newState.callableContainerMap)
 
         if (!rebuildIndex) {

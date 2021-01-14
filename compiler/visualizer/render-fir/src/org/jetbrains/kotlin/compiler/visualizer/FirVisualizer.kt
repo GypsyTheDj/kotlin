@@ -26,6 +26,8 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getChildrenOfType
+import org.jetbrains.kotlin.types.ConstantValueKind
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 
 private typealias Stack = MutableList<Pair<String, MutableList<String>>>
 
@@ -443,7 +445,7 @@ class FirVisualizer(private val firFile: FirFile) : BaseRenderer() {
         }
 
         override fun <T> visitConstExpression(constExpression: FirConstExpression<T>, data: StringBuilder) {
-            if (constExpression.kind != FirConstKind.String) {
+            if (constExpression.kind != ConstantValueKind.String) {
                 data.append(constExpression.kind)
             }
         }
@@ -452,7 +454,7 @@ class FirVisualizer(private val firFile: FirFile) : BaseRenderer() {
             resolvedQualifier.symbol?.let {
                 val fir = it.fir
                 if (fir is FirClass) {
-                    data.append(fir.classKind.name.toLowerCase()).append(" ")
+                    data.append(fir.classKind.name.toLowerCaseAsciiOnly()).append(" ")
                     data.append((fir as? FirRegularClass)?.name ?: Name.special("<anonymous>"))
                     if (fir.superTypeRefs.any { it.render() != "kotlin/Any" }) {
                         data.append(": ")
@@ -476,12 +478,6 @@ class FirVisualizer(private val firFile: FirFile) : BaseRenderer() {
             typeProjectionWithVariance.typeRef.accept(this, data)
         }
 
-        override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: StringBuilder) {
-            delegatedTypeRef.typeRef.accept(this, data)
-            data.append(" by ")
-            delegatedTypeRef.delegate?.accept(this, data)
-        }
-
         override fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef, data: StringBuilder) {
             val coneType = resolvedTypeRef.type
             data.append(removeCurrentFilePackage(coneType.render()))
@@ -493,16 +489,6 @@ class FirVisualizer(private val firFile: FirFile) : BaseRenderer() {
 
         override fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef, data: StringBuilder) {
             data.append("[ERROR : ${errorTypeRef.diagnostic.reason}]")
-        }
-
-        override fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef, data: StringBuilder) {
-            resolvedFunctionTypeRef.receiverTypeRef?.let {
-                it.accept(this, data)
-                data.append(".")
-            }
-            visitValueParameters(resolvedFunctionTypeRef.valueParameters, data)
-            data.append(" -> ")
-            resolvedFunctionTypeRef.returnTypeRef.accept(this, data)
         }
 
         override fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability, data: StringBuilder) {

@@ -5,20 +5,21 @@
 
 package org.jetbrains.kotlin.ir.declarations.persistent
 
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.persistent.carriers.Carrier
 import org.jetbrains.kotlin.ir.declarations.persistent.carriers.FunctionCarrier
-import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
+import org.jetbrains.kotlin.ir.descriptors.toIrBasedDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrBody
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrUninitializedType
+import org.jetbrains.kotlin.ir.types.impl.ReturnTypeIsNotInitializedException
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
@@ -27,7 +28,7 @@ internal abstract class PersistentIrFunctionCommon(
     override val endOffset: Int,
     origin: IrDeclarationOrigin,
     override val name: Name,
-    visibility: Visibility,
+    visibility: DescriptorVisibility,
     returnType: IrType,
     override val isInline: Boolean,
     override val isExternal: Boolean,
@@ -63,7 +64,7 @@ internal abstract class PersistentIrFunctionCommon(
 
     final override var returnType: IrType
         get() = returnTypeField.let {
-            if (it !== IrUninitializedType) it else error("Return type is not initialized")
+            if (it !== IrUninitializedType) it else throw ReturnTypeIsNotInitializedException(this)
         }
         set(c) {
             returnTypeField = c
@@ -132,9 +133,9 @@ internal abstract class PersistentIrFunctionCommon(
             }
         }
 
-    override var visibilityField: Visibility = visibility
+    override var visibilityField: DescriptorVisibility = visibility
 
-    override var visibility: Visibility
+    override var visibility: DescriptorVisibility
         get() = getCarrier().visibilityField
         set(v) {
             if (visibility !== v) {
@@ -180,7 +181,7 @@ internal class PersistentIrFunction(
     origin: IrDeclarationOrigin,
     override val symbol: IrSimpleFunctionSymbol,
     name: Name,
-    visibility: Visibility,
+    visibility: DescriptorVisibility,
     override val modality: Modality,
     returnType: IrType,
     isInline: Boolean,
@@ -211,7 +212,7 @@ internal class PersistentIrFakeOverrideFunction(
     endOffset: Int,
     origin: IrDeclarationOrigin,
     name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override var modality: Modality,
     returnType: IrType,
     isInline: Boolean,
@@ -235,14 +236,13 @@ internal class PersistentIrFakeOverrideFunction(
 
     @ObsoleteDescriptorBasedAPI
     override val descriptor
-        get() = _symbol?.descriptor ?: WrappedSimpleFunctionDescriptor()
+        get() = _symbol?.descriptor ?: this.toIrBasedDescriptor()
 
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun acquireSymbol(symbol: IrSimpleFunctionSymbol): IrSimpleFunction {
         assert(_symbol == null) { "$this already has symbol _symbol" }
         _symbol = symbol
         symbol.bind(this)
-        (symbol.descriptor as? WrappedSimpleFunctionDescriptor)?.bind(this)
         return this
     }
 }

@@ -5,8 +5,9 @@
 
 package org.jetbrains.kotlin.gradle
 
+import org.gradle.api.logging.configuration.WarningMode
 import org.jetbrains.kotlin.gradle.util.AGPVersion
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Test
 
 class ConfigurationCacheForAndroidIT : AbstractConfigurationCacheIT() {
@@ -15,17 +16,10 @@ class ConfigurationCacheForAndroidIT : AbstractConfigurationCacheIT() {
 
     override fun defaultBuildOptions() =
         super.defaultBuildOptions().copy(
-            androidHome = KotlinTestUtils.findAndroidSdk(),
+            androidHome = KtTestUtil.findAndroidSdk(),
             androidGradlePluginVersion = androidGradlePluginVersion,
             configurationCache = true,
-            /* AGP causes a configuration cache problem:
-                 - plugin 'com.android.internal.application': registration of listener on 'TaskExecutionGraph.addTaskExecutionListener' is unsupported
-
-               which causes tests to fail when configuration-cache-problems=fail is used.
-               However, everything works fine with WARN level reporting.
-               TODO: switch to FAIL when AGP no longer causes the cache problem
-             */
-            configurationCacheProblems = ConfigurationCacheProblems.WARN
+            configurationCacheProblems = ConfigurationCacheProblems.FAIL
         )
 
     @Test
@@ -39,6 +33,15 @@ class ConfigurationCacheForAndroidIT : AbstractConfigurationCacheIT() {
     fun testKotlinAndroidProject() = with(Project("AndroidProject")) {
         applyAndroid40Alpha4KotlinVersionWorkaround()
         testConfigurationCacheOf(":Lib:compileFlavor1DebugKotlin", ":Android:compileFlavor1DebugKotlin")
+    }
+
+    @Test
+    fun testKotlinAndroidProjectTests() = with(Project("AndroidIncrementalMultiModule")) {
+        applyAndroid40Alpha4KotlinVersionWorkaround()
+        testConfigurationCacheOf(
+            ":app:compileDebugAndroidTestKotlin", ":app:compileDebugUnitTestKotlin",
+            buildOptions = defaultBuildOptions().copy(warningMode = WarningMode.Summary)
+        )
     }
 
     /**

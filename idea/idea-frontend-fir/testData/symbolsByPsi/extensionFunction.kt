@@ -3,16 +3,22 @@ fun String.foo(): Int = 10
 // SYMBOLS:
 /*
 KtFirFunctionSymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
   callableIdIfNonLocal: foo
+  dispatchType: null
   isExtension: true
+  isExternal: false
+  isInline: false
   isOperator: false
+  isOverride: false
   isSuspend: false
   modality: FINAL
   name: foo
   origin: SOURCE
-  receiverType: kotlin/String
+  receiverType: [] kotlin/String
   symbolKind: TOP_LEVEL
-  type: kotlin/Int
   typeParameters: []
   valueParameters: []
+  visibility: PUBLIC
 */

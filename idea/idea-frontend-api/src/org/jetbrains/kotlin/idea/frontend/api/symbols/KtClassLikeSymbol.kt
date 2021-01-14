@@ -7,10 +7,21 @@ package org.jetbrains.kotlin.idea.frontend.api.symbols
 
 import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.*
 import org.jetbrains.kotlin.idea.frontend.api.symbols.pointers.KtSymbolPointer
+import org.jetbrains.kotlin.idea.frontend.api.types.KtType
 import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.types.Variance
 
+sealed class KtClassifierSymbol : KtSymbol, KtNamedSymbol
 
-sealed class KtClassLikeSymbol : KtSymbol, KtNamedSymbol, KtSymbolWithKind {
+abstract class KtTypeParameterSymbol : KtClassifierSymbol(), KtNamedSymbol {
+    abstract override fun createPointer(): KtSymbolPointer<KtTypeParameterSymbol>
+
+    abstract val upperBounds: List<KtType>
+    abstract val variance: Variance
+    abstract val isReified: Boolean
+}
+
+sealed class KtClassLikeSymbol : KtClassifierSymbol(), KtNamedSymbol, KtSymbolWithKind {
     abstract val classIdIfNonLocal: ClassId?
 
     abstract override fun createPointer(): KtSymbolPointer<KtClassLikeSymbol>
@@ -26,8 +37,22 @@ abstract class KtTypeAliasSymbol : KtClassLikeSymbol() {
 
 abstract class KtClassOrObjectSymbol : KtClassLikeSymbol(),
     KtSymbolWithTypeParameters,
-    KtSymbolWithModality<KtSymbolModality> {
+    KtSymbolWithModality<KtSymbolModality>,
+    KtSymbolWithVisibility,
+    KtAnnotatedSymbol,
+    KtSymbolWithMembers {
     abstract val classKind: KtClassKind
+
+    abstract val isInner: Boolean
+    abstract val isData: Boolean
+    abstract val isInline: Boolean
+    abstract val isFun: Boolean
+
+    abstract val isExternal: Boolean
+
+    abstract val companionObject: KtClassOrObjectSymbol?
+
+    abstract val superTypes: List<KtTypeAndAnnotations>
 
     abstract override fun createPointer(): KtSymbolPointer<KtClassOrObjectSymbol>
 }

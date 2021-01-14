@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.fir.analysis.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
+import org.jetbrains.kotlin.fir.originalForSubstitutionOverride
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
@@ -35,13 +36,13 @@ object FirUpperBoundViolatedChecker : FirQualifiedAccessChecker() {
             ?.fir.safeAs<FirTypeParameterRefsOwner>()
             ?: return
 
-        val typeCheckerContext = context.session.typeContext.newBaseTypeCheckerContext(
-            errorTypesEqualToAnything = false,
-            stubTypesEqualToAnything = false
-        )
+        val count = min(calleeFir.typeParameters.size, expression.typeArguments.size)
+
+        if (count == 0) {
+            return
+        }
 
         val parameterPairs = mutableMapOf<FirTypeParameterSymbol, FirResolvedTypeRef>()
-        val count = min(calleeFir.typeParameters.size, expression.typeArguments.size)
 
         for (it in 0 until count) {
             expression.typeArguments[it].safeAs<FirTypeProjectionWithVariance>()
@@ -59,6 +60,11 @@ object FirUpperBoundViolatedChecker : FirQualifiedAccessChecker() {
         // type parameters from the declaration
         val substitutor = substitutorByMap(
             parameterPairs.mapValues { it.value.type }
+        )
+
+        val typeCheckerContext = context.session.typeContext.newBaseTypeCheckerContext(
+            errorTypesEqualToAnything = false,
+            stubTypesEqualToAnything = false
         )
 
         parameterPairs.forEach { (proto, actual) ->
@@ -108,8 +114,7 @@ object FirUpperBoundViolatedChecker : FirQualifiedAccessChecker() {
         // substitution here
         val protoConstructor = functionCall.calleeReference.safeAs<FirResolvedNamedReference>()
             ?.resolvedSymbol.safeAs<FirConstructorSymbol>()
-            ?.overriddenSymbol
-            ?.fir.safeAs<FirConstructor>()
+            ?.fir?.originalForSubstitutionOverride
             ?: return
 
         // holds Collection<G> bound.
@@ -122,8 +127,13 @@ object FirUpperBoundViolatedChecker : FirQualifiedAccessChecker() {
             ?.type.safeAs<ConeClassLikeType>()
             ?: return
 
-        val constructorsParameterPairs = mutableMapOf<FirTypeParameterSymbol, ConeSimpleKotlinType>()
         val count = min(protoConstructor.typeParameters.size, actualConstructor.typeArguments.size)
+
+        if (count == 0) {
+            return
+        }
+
+        val constructorsParameterPairs = mutableMapOf<FirTypeParameterSymbol, ConeSimpleKotlinType>()
 
         for (it in 0 until count) {
             actualConstructor.typeArguments[it].safeAs<ConeSimpleKotlinType>()
@@ -182,8 +192,13 @@ object FirUpperBoundViolatedChecker : FirQualifiedAccessChecker() {
             ?.fir.safeAs<FirRegularClass>()
             ?: return false
 
-        val parameterPairs = mutableMapOf<FirTypeParameterSymbol, ConeClassLikeType>()
         val count = min(prototypeClass.typeParameters.size, type.typeArguments.size)
+
+        if (count == 0) {
+            return false
+        }
+
+        val parameterPairs = mutableMapOf<FirTypeParameterSymbol, ConeClassLikeType>()
 
         for (it in 0 until count) {
             type.typeArguments[it].safeAs<ConeClassLikeType>()

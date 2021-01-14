@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.codegen.inline
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.codegen.AsmUtil
+import org.jetbrains.kotlin.codegen.DescriptorAsmUtil
 import org.jetbrains.kotlin.codegen.PropertyReferenceCodegen
 import org.jetbrains.kotlin.codegen.StackValue
 import org.jetbrains.kotlin.codegen.binding.CalculatedClosure
@@ -136,7 +137,8 @@ abstract class DefaultLambda(
     override val isSuspend = parameterDescriptor.isSuspendLambda
 
     override fun generateLambdaBody(sourceCompiler: SourceCompilerForInline, reifiedTypeInliner: ReifiedTypeInliner<*>) {
-        val classReader = buildClassReaderByInternalName(sourceCompiler.state, lambdaClassType.internalName)
+        val classBytes = loadClassBytesByInternalName(sourceCompiler.state, lambdaClassType.internalName)
+        val classReader = ClassReader(classBytes)
         var isPropertyReference = false
         var isFunctionReference = false
         classReader.accept(object : ClassVisitor(Opcodes.API_VERSION) {
@@ -161,12 +163,7 @@ abstract class DefaultLambda(
         }
 
         val descriptor = Type.getMethodDescriptor(Type.VOID_TYPE, *capturedArgs)
-        val constructor = getMethodNode(
-            classReader.b,
-            "<init>",
-            descriptor,
-            lambdaClassType
-        )?.node
+        val constructor = getMethodNode(classBytes, "<init>", descriptor, lambdaClassType)?.node
 
         assert(constructor != null || capturedArgs.isEmpty()) {
             "Can't find non-default constructor <init>$descriptor for default lambda $lambdaClassType"
@@ -189,13 +186,8 @@ abstract class DefaultLambda(
 
         val signature = mapAsmSignature(sourceCompiler)
 
-        node = getMethodNode(
-            classReader.b,
-            methodName,
-            signature.descriptor,
-            lambdaClassType,
-            signatureAmbiguity = true
-        ) ?: error("Can't find method '$methodName$signature' in '${classReader.className}'")
+        node = getMethodNode(classBytes, methodName, signature.descriptor, lambdaClassType, signatureAmbiguity = true)
+            ?: error("Can't find method '$methodName$signature' in '${classReader.className}'")
 
         invokeMethod = Method(node.node.name, node.node.desc)
 
@@ -223,7 +215,7 @@ internal fun Type.boxReceiverForBoundReference() =
     AsmUtil.boxType(this)
 
 internal fun Type.boxReceiverForBoundReference(kotlinType: KotlinType, typeMapper: KotlinTypeMapper) =
-    AsmUtil.boxType(this, kotlinType, typeMapper)
+    DescriptorAsmUtil.boxType(this, kotlinType, typeMapper)
 
 abstract class ExpressionLambda(isCrossInline: Boolean) : LambdaInfo(isCrossInline) {
     override fun generateLambdaBody(sourceCompiler: SourceCompilerForInline, reifiedTypeInliner: ReifiedTypeInliner<*>) {

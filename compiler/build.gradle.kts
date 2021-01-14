@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
+import org.jetbrains.kotlin.ideaExt.idea
 import java.io.File
 
 plugins {
@@ -8,6 +9,8 @@ plugins {
 
 val compilerModules: Array<String> by rootProject.extra
 val otherCompilerModules = compilerModules.filter { it != path }
+
+val tasksWithWarnings: List<String> by rootProject.extra
 
 val effectSystemEnabled: Boolean by rootProject.extra
 val newInferenceEnabled: Boolean by rootProject.extra
@@ -45,7 +48,7 @@ dependencies {
     testCompile(projectTests(":compiler:fir:raw-fir:psi2fir"))
     testCompile(projectTests(":compiler:fir:raw-fir:light-tree2fir"))
     testCompile(projectTests(":compiler:fir:fir2ir"))
-    testCompile(projectTests(":compiler:fir:analysis-tests"))
+    testCompile(projectTests(":compiler:fir:analysis-tests:legacy-fir-tests"))
     testCompile(projectTests(":compiler:visualizer"))
     testCompile(projectTests(":generators:test-generator"))
     testCompile(project(":compiler:ir.ir2cfg"))
@@ -57,14 +60,9 @@ dependencies {
         testCompileOnly(project(it))
     }
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    Platform[193].orLower {
-        testCompileOnly(intellijDep()) { includeJars("openapi", rootProject = rootProject) }
-    }
     testCompileOnly(intellijDep()) { includeJars("idea", "idea_rt", "util", "asm-all", rootProject = rootProject) }
 
-    Platform[192].orHigher {
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    testRuntimeOnly(intellijPluginDep("java"))
 
     testRuntime(project(":kotlin-reflect"))
     testRuntime(androidDxJar())
@@ -74,10 +72,30 @@ dependencies {
     antLauncherJar(toolsJar())
 }
 
+val generationRoot = projectDir.resolve("tests-gen")
+
 sourceSets {
     "main" {}
     "test" {
         projectDefault()
+        this.java.srcDir(generationRoot.name)
+    }
+}
+
+if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
+    apply(plugin = "idea")
+    idea {
+        this.module.generatedSourceDirs.add(generationRoot)
+    }
+} else {
+    allprojects {
+        tasks.withType<KotlinCompile<*>> {
+            if (path !in tasksWithWarnings) {
+                kotlinOptions {
+                    allWarningsAsErrors = true
+                }
+            }
+        }
     }
 }
 
@@ -92,6 +110,6 @@ projectTest(parallel = true) {
     }
 }
 
-val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateCompilerTestsKt")
+val generateTestData by generator("org.jetbrains.kotlin.generators.tests.GenerateCompilerTestDataKt")
 
 testsJar()

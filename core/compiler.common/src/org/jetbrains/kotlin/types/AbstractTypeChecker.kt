@@ -18,8 +18,6 @@ abstract class AbstractTypeCheckerContext : TypeSystemContext {
 
     abstract fun substitutionSupertypePolicy(type: SimpleTypeMarker): SupertypesPolicy
 
-    abstract fun areEqualTypeConstructors(a: TypeConstructorMarker, b: TypeConstructorMarker): Boolean
-
     override fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker {
         return type
     }
@@ -160,6 +158,22 @@ object AbstractTypeChecker {
         return AbstractTypeChecker.isSubtypeOf(context.newBaseTypeCheckerContext(true, stubTypesEqualToAnything), subType, superType)
     }
 
+    fun isSubtypeOfClass(
+        context: AbstractTypeCheckerContext,
+        typeConstructor: TypeConstructorMarker,
+        superConstructor: TypeConstructorMarker
+    ): Boolean {
+        if (typeConstructor == superConstructor) return true
+        with(context) {
+            for (superType in typeConstructor.supertypes()) {
+                if (isSubtypeOfClass(context, superType.typeConstructor(), superConstructor)) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     fun equalTypes(
         context: TypeCheckerProviderContext,
         a: KotlinTypeMarker,
@@ -219,13 +233,23 @@ object AbstractTypeChecker {
         return isSubtypeOfForSingleClassifierType(subType.lowerBoundIfFlexible(), superType.upperBoundIfFlexible())
     }
 
-    private fun AbstractTypeCheckerContext.checkSubtypeForIntegerLiteralType(subType: SimpleTypeMarker, superType: SimpleTypeMarker): Boolean? {
+    private fun AbstractTypeCheckerContext.checkSubtypeForIntegerLiteralType(
+        subType: SimpleTypeMarker,
+        superType: SimpleTypeMarker
+    ): Boolean? {
         if (!subType.isIntegerLiteralType() && !superType.isIntegerLiteralType()) return null
 
-        fun typeInIntegerLiteralType(integerLiteralType: SimpleTypeMarker, type: SimpleTypeMarker, checkSupertypes: Boolean): Boolean =
+        fun isTypeInIntegerLiteralType(integerLiteralType: SimpleTypeMarker, type: SimpleTypeMarker, checkSupertypes: Boolean): Boolean =
             integerLiteralType.possibleIntegerTypes().any { possibleType ->
                 (possibleType.typeConstructor() == type.typeConstructor()) || (checkSupertypes && isSubtypeOf(this, type, possibleType))
             }
+
+        fun isIntegerLiteralTypeInIntersectionComponents(type: SimpleTypeMarker): Boolean {
+            val typeConstructor = type.typeConstructor()
+
+            return typeConstructor is IntersectionTypeConstructorMarker
+                    && typeConstructor.supertypes().any { it.asSimpleType()?.isIntegerLiteralType() == true }
+        }
 
         when {
             subType.isIntegerLiteralType() && superType.isIntegerLiteralType() -> {
@@ -233,14 +257,16 @@ object AbstractTypeChecker {
             }
 
             subType.isIntegerLiteralType() -> {
-                if (typeInIntegerLiteralType(subType, superType, checkSupertypes = false)) {
+                if (isTypeInIntegerLiteralType(subType, superType, checkSupertypes = false)) {
                     return true
                 }
             }
 
             superType.isIntegerLiteralType() -> {
                 // Here we also have to check supertypes for intersection types: { Int & String } <: IntegerLiteralTypes
-                if (typeInIntegerLiteralType(superType, subType, checkSupertypes = true)) {
+                if (isIntegerLiteralTypeInIntersectionComponents(subType)
+                    || isTypeInIntegerLiteralType(superType, subType, checkSupertypes = true)
+                ) {
                     return true
                 }
             }
@@ -281,7 +307,7 @@ object AbstractTypeChecker {
 
         val superConstructor = superType.typeConstructor()
 
-        if (isEqualTypeConstructors(subType.typeConstructor(), superConstructor) && superConstructor.parametersCount() == 0) return true
+        if (areEqualTypeConstructors(subType.typeConstructor(), superConstructor) && superConstructor.parametersCount() == 0) return true
         if (superType.typeConstructor().isAnyConstructor()) return true
 
         val supertypesWithSameConstructor = findCorrespondingSupertypes(subType, superConstructor)
@@ -378,12 +404,21 @@ object AbstractTypeChecker {
 
         if (subType.isStubType() || superType.isStubType()) return isStubTypeEqualsToAnything
 
-        val superTypeCaptured = superType.asCapturedType()
+        // superType might be a definitely notNull type (see KT-42824)
+        val superOriginalType = superType.asDefinitelyNotNullType()?.original() ?: superType
+        val superTypeCaptured = superOriginalType.asCapturedType()
         val lowerType = superTypeCaptured?.lowerType()
         if (superTypeCaptured != null && lowerType != null) {
+            // If superType is nullable, e.g., to check if Foo? a subtype of Captured<in Foo>?, we check the LHS, Foo?,
+            // against the nullable version of the lower type of RHS. See KT-42825
+            val nullableLowerType = if (superType.isMarkedNullable()) {
+                lowerType.withNullability(true)
+            } else {
+                if (superType.isDefinitelyNotNullType()) lowerType.makeDefinitelyNotNullOrNotNull() else lowerType
+            }
             when (getLowerCapturedTypePolicy(subType, superTypeCaptured)) {
-                CHECK_ONLY_LOWER -> return isSubtypeOf(this, subType, lowerType)
-                CHECK_SUBTYPE_AND_LOWER -> if (isSubtypeOf(this, subType, lowerType)) return true
+                CHECK_ONLY_LOWER -> return isSubtypeOf(this, subType, nullableLowerType)
+                CHECK_SUBTYPE_AND_LOWER -> if (isSubtypeOf(this, subType, nullableLowerType)) return true
                 SKIP_LOWER -> Unit
             }
         }
@@ -583,7 +618,7 @@ object AbstractNullabilityChecker {
 
         if (isStubTypeEqualsToAnything && type.isStubType()) return true
 
-        return isEqualTypeConstructors(type.typeConstructor(), end)
+        return areEqualTypeConstructors(type.typeConstructor(), end)
     }
 }
 

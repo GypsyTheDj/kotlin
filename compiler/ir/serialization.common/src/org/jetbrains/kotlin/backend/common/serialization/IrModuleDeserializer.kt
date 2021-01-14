@@ -9,13 +9,9 @@ import org.jetbrains.kotlin.backend.common.serialization.encodings.BinarySymbolD
 import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
 import org.jetbrains.kotlin.builtins.functions.FunctionClassKind
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
-import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
-import org.jetbrains.kotlin.ir.declarations.IrProperty
-import org.jetbrains.kotlin.ir.declarations.IrSymbolOwner
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.IrAbstractFunctionFactory
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.descriptors.WrappedDeclarationDescriptor
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.util.IdSignature
 import org.jetbrains.kotlin.library.IrLibrary
@@ -36,15 +32,24 @@ abstract class IrModuleDeserializer(val moduleDescriptor: ModuleDescriptor) {
     abstract operator fun contains(idSig: IdSignature): Boolean
     abstract fun deserializeIrSymbol(idSig: IdSignature, symbolKind: BinarySymbolData.SymbolKind): IrSymbol
 
+    open fun referenceSimpleFunctionByLocalSignature(file: IrFile, idSignature: IdSignature) : IrSimpleFunctionSymbol =
+        error("Unsupported operation")
+
+    open fun referencePropertyByLocalSignature(file: IrFile, idSignature: IdSignature): IrPropertySymbol =
+        error("Unsupported operation")
+
     open fun declareIrSymbol(symbol: IrSymbol) {
-        assert(symbol.isPublicApi) { "Symbol is not public API: ${symbol.descriptor}" }
-        assert(symbol.descriptor !is WrappedDeclarationDescriptor<*>)
-        deserializeIrSymbol(symbol.signature, symbol.kind())
+        val signature = symbol.signature
+        require(signature != null) { "Symbol is not public API: ${symbol.descriptor}" }
+        assert(symbol.hasDescriptor)
+        deserializeIrSymbol(signature, symbol.kind())
     }
 
     open val klib: IrLibrary get() = error("Unsupported operation")
 
     open fun init() = init(this)
+
+    open fun postProcess() {}
 
     open fun init(delegate: IrModuleDeserializer) {}
 
@@ -63,7 +68,7 @@ abstract class IrModuleDeserializer(val moduleDescriptor: ModuleDescriptor) {
 
 // Used to resolve built in symbols like `kotlin.ir.internal.*` or `kotlin.FunctionN`
 class IrModuleDeserializerWithBuiltIns(
-    private val builtIns: IrBuiltIns,
+    builtIns: IrBuiltIns,
     private val functionFactory: IrAbstractFunctionFactory,
     private val delegate: IrModuleDeserializer
 ) : IrModuleDeserializer(delegate.moduleDescriptor) {
@@ -91,6 +96,12 @@ class IrModuleDeserializerWithBuiltIns(
 
         return checkIsFunctionInterface(idSig) || idSig in delegate
     }
+
+    override fun referenceSimpleFunctionByLocalSignature(file: IrFile, idSignature: IdSignature) : IrSimpleFunctionSymbol =
+        delegate.referenceSimpleFunctionByLocalSignature(file, idSignature)
+
+    override fun referencePropertyByLocalSignature(file: IrFile, idSignature: IdSignature): IrPropertySymbol =
+        delegate.referencePropertyByLocalSignature(file, idSignature)
 
     override fun deserializeReachableDeclarations() {
         delegate.deserializeReachableDeclarations()
@@ -166,8 +177,9 @@ class IrModuleDeserializerWithBuiltIns(
     }
 
     override fun declareIrSymbol(symbol: IrSymbol) {
-        if (symbol.isPublicApi && checkIsFunctionInterface(symbol.signature))
-            resolveFunctionalInterface(symbol.signature, symbol.kind())
+        val signature = symbol.signature
+        if (signature != null && checkIsFunctionInterface(signature))
+            resolveFunctionalInterface(signature, symbol.kind())
         else delegate.declareIrSymbol(symbol)
     }
 

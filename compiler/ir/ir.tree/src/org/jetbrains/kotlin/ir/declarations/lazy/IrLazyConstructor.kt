@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.ir.declarations.lazy
 
 import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrBody
@@ -28,7 +28,7 @@ class IrLazyConstructor(
     override val symbol: IrConstructorSymbol,
     override val descriptor: ClassConstructorDescriptor,
     override val name: Name,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override val isInline: Boolean,
     override val isExternal: Boolean,
     override val isPrimary: Boolean,
@@ -58,7 +58,7 @@ class IrLazyConstructor(
 
     override var typeParameters: List<IrTypeParameter> by lazyVar {
         typeTranslator.buildWithScope(this) {
-            stubGenerator.symbolTable.withScope(descriptor) {
+            stubGenerator.symbolTable.withScope(this) {
                 val classTypeParametersCount = descriptor.constructedClass.original.declaredTypeParameters.size
                 val allConstructorTypeParameters = descriptor.typeParameters
                 allConstructorTypeParameters.subList(classTypeParametersCount, allConstructorTypeParameters.size).mapTo(ArrayList()) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -39,6 +39,7 @@ class FirAnonymousObjectBuilder : FirClassBuilder, FirAnnotationContainerBuilder
     override lateinit var session: FirSession
     var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
     override lateinit var origin: FirDeclarationOrigin
+    override var attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     override val typeParameters: MutableList<FirTypeParameterRef> = mutableListOf()
     override lateinit var classKind: ClassKind
     override val superTypeRefs: MutableList<FirTypeRef> = mutableListOf()
@@ -54,6 +55,7 @@ class FirAnonymousObjectBuilder : FirClassBuilder, FirAnnotationContainerBuilder
             session,
             resolvePhase,
             origin,
+            attributes,
             typeParameters,
             classKind,
             superTypeRefs,

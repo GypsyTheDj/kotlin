@@ -37,6 +37,7 @@ fun Task.dependsOnKotlinPluginInstall() {
         ":kotlin-noarg:install",
         ":kotlin-sam-with-receiver:install",
         ":kotlin-android-extensions:install",
+        ":kotlin-parcelize-compiler:install",
         ":kotlin-build-common:install",
         ":kotlin-compiler-embeddable:install",
         ":native:kotlin-native-utils:install",
@@ -75,6 +76,7 @@ fun Project.projectTest(
     taskName: String = "test",
     parallel: Boolean = false,
     shortenTempRootName: Boolean = false,
+    jUnit5Enabled: Boolean = false,
     body: Test.() -> Unit = {}
 ): TaskProvider<Test> = getOrCreateTask(taskName) {
     doFirst {
@@ -108,12 +110,29 @@ fun Project.projectTest(
                 }
             }
 
-            include {
-                val path = it.path
-                if (it.isDirectory) {
+            val parentNames = if (jUnit5Enabled) {
+                /*
+                 * If we run test from inner test class with junit 5 we need
+                 *   to include all containing classes of our class
+                 */
+                val nestedNames = classFileNameWithoutExtension.split("$")
+                mutableListOf(nestedNames.first()).also {
+                    for (s in nestedNames.subList(1, nestedNames.size)) {
+                        it += "${it.last()}\$$s"
+                    }
+                }
+            } else emptyList()
+
+            include { treeElement ->
+                val path = treeElement.path
+                if (treeElement.isDirectory) {
                     classFileNameWithoutExtension.startsWith(path)
                 } else {
-                    path == classFileName || (path.endsWith(".class") && path.startsWith("$classFileNameWithoutExtension$"))
+                    if (jUnit5Enabled) {
+                        path == classFileName || (path.endsWith(".class") && parentNames.any { path.startsWith(it) })
+                    } else {
+                        path == classFileName || (path.endsWith(".class") && path.startsWith("$classFileNameWithoutExtension$"))
+                    }
                 }
             }
         }
@@ -153,7 +172,7 @@ fun Project.projectTest(
 
     var subProjectTempRoot: Path? = null
     doFirst {
-        val teamcity = rootProject.findProperty("teamcity") as? Map<Any?, *>
+        val teamcity = rootProject.findProperty("teamcity") as? Map<*, *>
         val systemTempRoot =
             // TC by default doesn't switch `teamcity.build.tempDir` to 'java.io.tmpdir' so it could cause to wasted disk space
             // Should be fixed soon on Teamcity side
@@ -179,7 +198,7 @@ fun Project.projectTest(
     if (parallel) {
         maxParallelForks =
             project.findProperty("kotlin.test.maxParallelForks")?.toString()?.toInt()
-                ?: Math.max(Runtime.getRuntime().availableProcessors() / if (kotlinBuildProperties.isTeamcityBuild) 2 else 4, 1)
+                ?: (Runtime.getRuntime().availableProcessors() / if (kotlinBuildProperties.isTeamcityBuild) 2 else 4).coerceAtLeast(1)
     }
     body()
 }

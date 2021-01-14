@@ -13,7 +13,8 @@ dependencies {
     testImplementation(intellijDep()) { includeJars("trove4j") } //needed only for message bundles
 
     testImplementation(project(":kotlin-test:kotlin-test-junit"))
-    implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm:${property("versions.kotlinx-collections-immutable")}")
+    implementation(kotlinxCollectionsImmutable())
+    implementation("com.google.code.gson:gson:2.8.6")
 }
 
 sourceSets {

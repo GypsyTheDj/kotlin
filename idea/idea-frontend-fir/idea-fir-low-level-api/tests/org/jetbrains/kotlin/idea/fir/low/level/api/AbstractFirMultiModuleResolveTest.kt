@@ -15,15 +15,13 @@ import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.dependenciesWithoutSelf
-import org.jetbrains.kotlin.fir.extensions.BunchOfRegisteredExtensions
-import org.jetbrains.kotlin.fir.extensions.extensionService
-import org.jetbrains.kotlin.fir.extensions.registerExtensions
 import org.jetbrains.kotlin.fir.java.*
 import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.resolve.transformers.FirTransformerBasedResolveProcessor
 import org.jetbrains.kotlin.fir.resolve.transformers.createAllTransformerBasedResolveProcessors
+import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
 import org.jetbrains.kotlin.idea.caches.project.isLibraryClasses
@@ -59,27 +57,25 @@ abstract class AbstractFirMultiModuleResolveTest : AbstractMultiModuleTest() {
 
     private fun createSession(module: Module, provider: FirProjectSessionProvider): FirJavaModuleBasedSession {
         val moduleInfo = module.productionSourceInfo()!!
-        return FirJavaModuleBasedSession.create(moduleInfo, provider, moduleInfo.contentScope()).also {
-            it.extensionService.registerExtensions(BunchOfRegisteredExtensions.empty())
-        }
+        return FirSessionFactory.createJavaModuleBasedSession(moduleInfo, provider, moduleInfo.contentScope(), project)
     }
 
     private fun createLibrarySession(moduleInfo: IdeaModuleInfo, provider: FirProjectSessionProvider): FirLibrarySession {
         val contentScope = moduleInfo.contentScope()
-        return FirLibrarySession.create(moduleInfo, provider, contentScope, project, IDEPackagePartProvider(contentScope))
+        return FirSessionFactory.createLibrarySession(moduleInfo, provider, contentScope, project, IDEPackagePartProvider(contentScope))
     }
 
     private fun doFirResolveTest(dirPath: String) {
         val firFilesPerSession = mutableMapOf<FirJavaModuleBasedSession, List<FirFile>>()
         val processorsPerSession = mutableMapOf<FirJavaModuleBasedSession, List<FirTransformerBasedResolveProcessor>>()
         val sessions = mutableListOf<FirJavaModuleBasedSession>()
-        val provider = FirProjectSessionProvider(project)
+        val provider = FirProjectSessionProvider()
         for (module in project.allModules().drop(1)) {
             val session = createSession(module, provider)
             sessions += session
 
             val firProvider = (session.firProvider as FirProviderImpl)
-            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
+            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider)
             val psiManager = PsiManager.getInstance(project)
 
             val ideaModuleInfo = session.moduleInfo.cast<IdeaModuleInfo>()

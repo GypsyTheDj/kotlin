@@ -7,45 +7,57 @@ package org.jetbrains.kotlin.idea.fir.low.level.api
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.idea.util.psiModificationTrackerBasedCachedValue
+import com.intellij.openapi.roots.ProjectRootModificationTracker
+import org.jetbrains.annotations.TestOnly
+import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.ModuleSourceInfo
+import org.jetbrains.kotlin.idea.fir.low.level.api.api.FirModuleResolveState
+import org.jetbrains.kotlin.idea.fir.low.level.api.lazy.resolve.FirLazyDeclarationResolver
+import org.jetbrains.kotlin.idea.fir.low.level.api.sessions.FirIdeSessionProviderStorage
+import org.jetbrains.kotlin.idea.fir.low.level.api.trackers.KotlinFirOutOfBlockModificationTrackerFactory
+import org.jetbrains.kotlin.idea.util.cachedValue
+import org.jetbrains.kotlin.idea.util.getValue
+import org.jetbrains.kotlin.trackers.createProjectWideOutOfBlockModificationTracker
 import java.util.concurrent.ConcurrentHashMap
-import org.jetbrains.kotlin.idea.caches.project.*
-import org.jetbrains.kotlin.idea.fir.low.level.api.sessions.FirIdeModuleLibraryDependenciesSession
 
-internal class FirIdeResolveStateService(private val project: Project) {
-    private val stateCache by psiModificationTrackerBasedCachedValue(project) {
+internal class FirIdeResolveStateService(project: Project) {
+    private val sessionProviderStorage = FirIdeSessionProviderStorage(project)
+
+    private val stateCache by cachedValue(
+        project,
+        project.createProjectWideOutOfBlockModificationTracker(),
+        ProjectRootModificationTracker.getInstance(project),
+    ) {
         ConcurrentHashMap<IdeaModuleInfo, FirModuleResolveStateImpl>()
     }
 
-    private fun createResolveStateFor(moduleInfo: IdeaModuleInfo): FirModuleResolveStateImpl {
-        val sessionProvider = FirIdeSessionProvider(project)
-        val firPhaseRunner = FirPhaseRunner()
-
-        val librariesSession = FirIdeModuleLibraryDependenciesSession.create(moduleInfo as ModuleSourceInfo, sessionProvider, project)
-
-        val sourcesSession = FirIdeJavaModuleBasedSession.create(
-            project,
-            moduleInfo,
-            firPhaseRunner,
-            sessionProvider,
-            librariesSession,
-        ).apply { sessionProvider.registerSession(moduleInfo, this) }
-
-
-        return FirModuleResolveStateImpl(
-            moduleInfo,
-            sourcesSession,
-            librariesSession,
-            sessionProvider,
-            sourcesSession.firFileBuilder,
-            sourcesSession.cache
-        )
-    }
-
     fun getResolveState(moduleInfo: IdeaModuleInfo): FirModuleResolveStateImpl =
-        stateCache.getOrPut(moduleInfo) { createResolveStateFor(moduleInfo) }
+        stateCache.computeIfAbsent(moduleInfo) { createResolveStateFor(moduleInfo, sessionProviderStorage) }
 
     companion object {
         fun getInstance(project: Project): FirIdeResolveStateService = project.service()
+
+        internal fun createResolveStateFor(
+            moduleInfo: IdeaModuleInfo,
+            sessionProviderStorage: FirIdeSessionProviderStorage
+        ): FirModuleResolveStateImpl {
+            require(moduleInfo is ModuleSourceInfo)
+            val sessionProvider = sessionProviderStorage.getSessionProvider(moduleInfo)
+            val firFileBuilder = sessionProvider.rootModuleSession.firFileBuilder
+            return FirModuleResolveStateImpl(
+                moduleInfo.project,
+                moduleInfo,
+                sessionProvider,
+                firFileBuilder,
+                FirLazyDeclarationResolver(firFileBuilder),
+            )
+        }
     }
 }
+
+@TestOnly
+fun createResolveStateForNoCaching(
+    moduleInfo: IdeaModuleInfo,
+): FirModuleResolveState = FirIdeResolveStateService.createResolveStateFor(moduleInfo, FirIdeSessionProviderStorage(moduleInfo.project!!))
+
+

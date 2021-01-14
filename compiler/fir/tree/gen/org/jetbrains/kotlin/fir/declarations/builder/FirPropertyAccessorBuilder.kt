@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -27,8 +27,10 @@ import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirBlock
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertyAccessorSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.*
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
 /*
  * This file was generated automatically
@@ -41,13 +43,16 @@ class FirPropertyAccessorBuilder : FirFunctionBuilder, FirAnnotationContainerBui
     override lateinit var session: FirSession
     var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
     override lateinit var origin: FirDeclarationOrigin
+    override var attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     override lateinit var returnTypeRef: FirTypeRef
     override val valueParameters: MutableList<FirValueParameter> = mutableListOf()
     override var body: FirBlock? = null
+    lateinit var status: FirDeclarationStatus
+    var containerSource: DeserializedContainerSource? = null
+    var dispatchReceiverType: ConeKotlinType? = null
     var contractDescription: FirContractDescription = FirEmptyContractDescription
     lateinit var symbol: FirPropertyAccessorSymbol
     var isGetter: Boolean by kotlin.properties.Delegates.notNull<Boolean>()
-    lateinit var status: FirDeclarationStatus
     override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
     val typeParameters: MutableList<FirTypeParameter> = mutableListOf()
 
@@ -58,13 +63,16 @@ class FirPropertyAccessorBuilder : FirFunctionBuilder, FirAnnotationContainerBui
             session,
             resolvePhase,
             origin,
+            attributes,
             returnTypeRef,
             valueParameters,
             body,
+            status,
+            containerSource,
+            dispatchReceiverType,
             contractDescription,
             symbol,
             isGetter,
-            status,
             annotations,
             typeParameters,
         )
@@ -78,4 +86,29 @@ inline fun buildPropertyAccessor(init: FirPropertyAccessorBuilder.() -> Unit): F
         callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
     }
     return FirPropertyAccessorBuilder().apply(init).build()
+}
+
+@OptIn(ExperimentalContracts::class)
+inline fun buildPropertyAccessorCopy(original: FirPropertyAccessor, init: FirPropertyAccessorBuilder.() -> Unit): FirPropertyAccessor {
+    contract {
+        callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
+    }
+    val copyBuilder = FirPropertyAccessorBuilder()
+    copyBuilder.source = original.source
+    copyBuilder.session = original.session
+    copyBuilder.resolvePhase = original.resolvePhase
+    copyBuilder.origin = original.origin
+    copyBuilder.attributes = original.attributes.copy()
+    copyBuilder.returnTypeRef = original.returnTypeRef
+    copyBuilder.valueParameters.addAll(original.valueParameters)
+    copyBuilder.body = original.body
+    copyBuilder.status = original.status
+    copyBuilder.containerSource = original.containerSource
+    copyBuilder.dispatchReceiverType = original.dispatchReceiverType
+    copyBuilder.contractDescription = original.contractDescription
+    copyBuilder.symbol = original.symbol
+    copyBuilder.isGetter = original.isGetter
+    copyBuilder.annotations.addAll(original.annotations)
+    copyBuilder.typeParameters.addAll(original.typeParameters)
+    return copyBuilder.apply(init).build()
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -85,6 +85,7 @@ import org.jetbrains.kotlin.fir.declarations.FirErrorFunction
 import org.jetbrains.kotlin.fir.declarations.FirErrorProperty
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
+import org.jetbrains.kotlin.fir.expressions.FirImplicitInvokeCall
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
@@ -119,14 +120,11 @@ import org.jetbrains.kotlin.fir.references.FirBackingFieldReference
 import org.jetbrains.kotlin.fir.references.FirResolvedCallableReference
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
-import org.jetbrains.kotlin.fir.types.FirDelegatedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRefWithNullability
 import org.jetbrains.kotlin.fir.types.FirUserTypeRef
 import org.jetbrains.kotlin.fir.types.FirDynamicTypeRef
 import org.jetbrains.kotlin.fir.types.FirFunctionTypeRef
-import org.jetbrains.kotlin.fir.types.FirResolvedFunctionTypeRef
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
-import org.jetbrains.kotlin.fir.types.FirComposedSuperTypeRef
 import org.jetbrains.kotlin.fir.contracts.FirEffectDeclaration
 import org.jetbrains.kotlin.fir.contracts.FirContractDescription
 import org.jetbrains.kotlin.fir.contracts.FirLegacyRawContractDescription
@@ -457,6 +455,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitElement(functionCall)
     }
 
+    open fun visitImplicitInvokeCall(implicitInvokeCall: FirImplicitInvokeCall) {
+        visitElement(implicitInvokeCall)
+    }
+
     open fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall) {
         visitElement(delegatedConstructorCall)
     }
@@ -593,10 +595,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitElement(errorTypeRef)
     }
 
-    open fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef) {
-        visitElement(delegatedTypeRef)
-    }
-
     open fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability) {
         visitElement(typeRefWithNullability)
     }
@@ -613,16 +611,8 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitElement(functionTypeRef)
     }
 
-    open fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef) {
-        visitElement(resolvedFunctionTypeRef)
-    }
-
     open fun visitImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef) {
         visitElement(implicitTypeRef)
-    }
-
-    open fun visitComposedSuperTypeRef(composedSuperTypeRef: FirComposedSuperTypeRef) {
-        visitElement(composedSuperTypeRef)
     }
 
     open fun visitEffectDeclaration(effectDeclaration: FirEffectDeclaration) {
@@ -965,6 +955,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitFunctionCall(functionCall)
     }
 
+    final override fun visitImplicitInvokeCall(implicitInvokeCall: FirImplicitInvokeCall, data: Nothing?) {
+        visitImplicitInvokeCall(implicitInvokeCall)
+    }
+
     final override fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: Nothing?) {
         visitDelegatedConstructorCall(delegatedConstructorCall)
     }
@@ -1101,10 +1095,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitErrorTypeRef(errorTypeRef)
     }
 
-    final override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: Nothing?) {
-        visitDelegatedTypeRef(delegatedTypeRef)
-    }
-
     final override fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability, data: Nothing?) {
         visitTypeRefWithNullability(typeRefWithNullability)
     }
@@ -1121,16 +1111,8 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitFunctionTypeRef(functionTypeRef)
     }
 
-    final override fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef, data: Nothing?) {
-        visitResolvedFunctionTypeRef(resolvedFunctionTypeRef)
-    }
-
     final override fun visitImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef, data: Nothing?) {
         visitImplicitTypeRef(implicitTypeRef)
-    }
-
-    final override fun visitComposedSuperTypeRef(composedSuperTypeRef: FirComposedSuperTypeRef, data: Nothing?) {
-        visitComposedSuperTypeRef(composedSuperTypeRef)
     }
 
     final override fun visitEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: Nothing?) {

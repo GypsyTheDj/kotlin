@@ -5,8 +5,11 @@
 
 package org.jetbrains.kotlin.fir
 
+import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.resolve.calls.*
+import org.jetbrains.kotlin.fir.resolve.calls.Candidate
+import org.jetbrains.kotlin.fir.resolve.calls.ReceiverValue
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
@@ -16,17 +19,20 @@ import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
-import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 
+interface FirModuleVisibilityChecker : FirSessionComponent {
+    fun isInFriendModule(declaration: FirMemberDeclaration): Boolean
+}
+
 abstract class FirVisibilityChecker : FirSessionComponent {
+    @NoMutableState
     object Default : FirVisibilityChecker() {
         override fun platformVisibilityCheck(
             declarationVisibility: Visibility,
             symbol: AbstractFirBasedSymbol<*>,
             useSiteFile: FirFile,
-            ownerId: ClassId?,
             containingDeclarations: List<FirDeclaration>,
             candidate: Candidate,
             session: FirSession
@@ -35,24 +41,30 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         }
     }
 
-    fun isVisible(
-        declaration: FirMemberDeclaration,
-        symbol: AbstractFirBasedSymbol<*>,
+    fun <T> isVisible(
+        declaration: T,
         candidate: Candidate
-    ): Boolean {
+    ): Boolean where T : FirMemberDeclaration, T : FirSymbolOwner<*> {
+        val symbol = declaration.symbol
+
+        if (declaration is FirCallableDeclaration<*> && (declaration.isIntersectionOverride || declaration.isSubstitutionOverride)) {
+            @Suppress("UNCHECKED_CAST")
+            return isVisible(declaration.originalIfFakeOverride() as T, candidate)
+        }
+
         val callInfo = candidate.callInfo
         val useSiteFile = callInfo.containingFile
         val containingDeclarations = callInfo.containingDeclarations
         val session = callInfo.session
         val provider = session.firProvider
-        val ownerId = symbol.getOwnerId()
 
         return when (declaration.visibility) {
             Visibilities.Internal -> {
-                declaration.session == callInfo.session
+                declaration.session == session || session.moduleVisibilityChecker?.isInFriendModule(declaration) == true
             }
             Visibilities.Private, Visibilities.PrivateToThis -> {
-                if (declaration.session == callInfo.session) {
+                val ownerId = symbol.getOwnerId()
+                if (declaration.session == session) {
                     if (ownerId == null || declaration is FirConstructor && declaration.isFromSealedClass) {
                         val candidateFile = when (symbol) {
                             is FirClassLikeSymbol<*> -> provider.getFirClassifierContainerFileIfAny(symbol)
@@ -71,6 +83,7 @@ abstract class FirVisibilityChecker : FirSessionComponent {
             }
 
             Visibilities.Protected -> {
+                val ownerId = symbol.getOwnerId()
                 ownerId != null && canSeeProtectedMemberOf(containingDeclarations, candidate.dispatchReceiverValue, ownerId, session)
             }
 
@@ -78,7 +91,6 @@ abstract class FirVisibilityChecker : FirSessionComponent {
                 declaration.visibility,
                 symbol,
                 useSiteFile,
-                ownerId,
                 containingDeclarations,
                 candidate,
                 session
@@ -90,7 +102,6 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         declarationVisibility: Visibility,
         symbol: AbstractFirBasedSymbol<*>,
         useSiteFile: FirFile,
-        ownerId: ClassId?,
         containingDeclarations: List<FirDeclaration>,
         candidate: Candidate,
         session: FirSession
@@ -161,23 +172,6 @@ abstract class FirVisibilityChecker : FirSessionComponent {
                 (name == "monitorEnter" || name == "monitorExit")
     }
 
-    private fun AbstractFirBasedSymbol<*>.getOwnerId(): ClassId? {
-        return when (this) {
-            is FirClassLikeSymbol<*> -> {
-                val ownerId = classId.outerClassId
-                if (classId.isLocal) {
-                    ownerId?.asLocal() ?: classId
-                } else {
-                    ownerId
-                }
-            }
-            is FirCallableSymbol<*> -> callableId.classId
-            else -> error("Unsupported owner search for ${fir.javaClass}: ${fir.render()}")
-        }
-    }
-
-    private fun ClassId.asLocal(): ClassId = ClassId(packageFqName, relativeClassName, true)
-
     protected fun canSeeProtectedMemberOf(
         containingDeclarationOfUseSite: List<FirDeclaration>,
         dispatchReceiver: ReceiverValue?,
@@ -203,4 +197,22 @@ abstract class FirVisibilityChecker : FirSessionComponent {
     }
 }
 
+val FirSession.moduleVisibilityChecker: FirModuleVisibilityChecker? by FirSession.nullableSessionComponentAccessor()
 val FirSession.visibilityChecker: FirVisibilityChecker by FirSession.sessionComponentAccessor()
+
+fun AbstractFirBasedSymbol<*>.getOwnerId(): ClassId? {
+    return when (this) {
+        is FirClassLikeSymbol<*> -> {
+            val ownerId = classId.outerClassId
+            if (classId.isLocal) {
+                ownerId?.asLocal() ?: classId
+            } else {
+                ownerId
+            }
+        }
+        is FirCallableSymbol<*> -> containingClass()?.classId
+        else -> error("Unsupported owner search for ${fir.javaClass}: ${fir.render()}")
+    }
+}
+
+private fun ClassId.asLocal(): ClassId = ClassId(packageFqName, relativeClassName, true)

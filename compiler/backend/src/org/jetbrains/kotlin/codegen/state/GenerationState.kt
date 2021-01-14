@@ -39,6 +39,7 @@ import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.deprecation.CoroutineCompatibilitySupport
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
+import org.jetbrains.kotlin.resolve.diagnostics.PrecomputedSuppressCache
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind.*
@@ -53,7 +54,7 @@ class GenerationState private constructor(
     val project: Project,
     builderFactory: ClassBuilderFactory,
     val module: ModuleDescriptor,
-    bindingContext: BindingContext,
+    val originalFrontendBindingContext: BindingContext,
     val files: List<KtFile>,
     val configuration: CompilerConfiguration,
     val generateDeclaredClassFilter: GenerateClassFilter,
@@ -107,7 +108,7 @@ class GenerationState private constructor(
         fun wantsDiagnostics(v: Boolean) =
             apply { wantsDiagnostics = v }
 
-        var jvmBackendClassResolver: JvmBackendClassResolver = JvmBackendClassResolverForModuleWithDependencies(module); private set
+        private var jvmBackendClassResolver: JvmBackendClassResolver = JvmBackendClassResolverForModuleWithDependencies(module)
         fun jvmBackendClassResolver(v: JvmBackendClassResolver) =
             apply { jvmBackendClassResolver = v }
 
@@ -152,8 +153,10 @@ class GenerationState private constructor(
     val deserializationConfiguration: DeserializationConfiguration =
         CompilerDeserializationConfiguration(configuration.languageVersionSettings)
 
-    val deprecationProvider =
-        DeprecationResolver(LockBasedStorageManager.NO_LOCKS, configuration.languageVersionSettings, CoroutineCompatibilitySupport.ENABLED, JavaDeprecationSettings)
+    val deprecationProvider = DeprecationResolver(
+        LockBasedStorageManager.NO_LOCKS, configuration.languageVersionSettings, CoroutineCompatibilitySupport.ENABLED,
+        JavaDeprecationSettings
+    )
 
     init {
         val icComponents = configuration.get(JVMConfigurationKeys.INCREMENTAL_COMPILATION_COMPONENTS)
@@ -178,7 +181,11 @@ class GenerationState private constructor(
     }
 
     val extraJvmDiagnosticsTrace: BindingTrace =
-        DelegatingBindingTrace(bindingContext, "For extra diagnostics in ${this::class.java}", false)
+        DelegatingBindingTrace(
+            originalFrontendBindingContext, "For extra diagnostics in ${this::class.java}", false,
+            customSuppressCache = if (isIrBackend) PrecomputedSuppressCache(originalFrontendBindingContext, files) else null,
+        )
+
     private val interceptedBuilderFactory: ClassBuilderFactory
     private var used = false
 
@@ -190,21 +197,30 @@ class GenerationState private constructor(
 
     val languageVersionSettings = configuration.languageVersionSettings
 
+    val useOldManglingSchemeForFunctionsWithInlineClassesInSignatures =
+        configuration.getBoolean(JVMConfigurationKeys.USE_OLD_INLINE_CLASSES_MANGLING_SCHEME) ||
+                languageVersionSettings.languageVersion.run { major == 1 && minor < 4 }
+
     val target = configuration.get(JVMConfigurationKeys.JVM_TARGET) ?: JvmTarget.DEFAULT
+    val runtimeStringConcat =
+        if (target.majorVersion >= JvmTarget.JVM_9.majorVersion)
+            configuration.get(JVMConfigurationKeys.STRING_CONCAT) ?: JvmStringConcat.INLINE
+        else JvmStringConcat.INLINE
 
     val moduleName: String = moduleName ?: JvmCodegenUtil.getModuleName(module)
     val classBuilderMode: ClassBuilderMode = builderFactory.classBuilderMode
     val bindingTrace: BindingTrace = DelegatingBindingTrace(
-        bindingContext, "trace in GenerationState",
+        originalFrontendBindingContext, "trace in GenerationState",
         filter = if (wantsDiagnostics) BindingTraceFilter.ACCEPT_ALL else BindingTraceFilter.NO_DIAGNOSTICS
     )
     val bindingContext: BindingContext = bindingTrace.bindingContext
-    val mainFunctionDetector = MainFunctionDetector(bindingContext, languageVersionSettings)
+    val mainFunctionDetector = MainFunctionDetector(originalFrontendBindingContext, languageVersionSettings)
     val typeMapper: KotlinTypeMapper = KotlinTypeMapper(
-        this.bindingContext,
+        bindingContext,
         classBuilderMode,
         this.moduleName,
         languageVersionSettings,
+        useOldManglingSchemeForFunctionsWithInlineClassesInSignatures,
         IncompatibleClassTrackerImpl(extraJvmDiagnosticsTrace),
         target,
         isIrBackend
@@ -236,8 +252,10 @@ class GenerationState private constructor(
     class ForScript {
         // quite a mess, this one is an input from repl interpreter
         var earlierScriptsForReplInterpreter: List<ScriptDescriptor>? = null
+
         // and the rest is an output from the codegen
         var resultFieldName: String? = null
+        var resultTypeString: String? = null
         var resultType: KotlinType? = null
     }
 
@@ -249,13 +267,18 @@ class GenerationState private constructor(
     val assertionsMode: JVMAssertionsMode = configuration.get(JVMConfigurationKeys.ASSERTIONS_MODE, JVMAssertionsMode.DEFAULT)
     val isInlineDisabled: Boolean = configuration.getBoolean(CommonConfigurationKeys.DISABLE_INLINE)
     val useTypeTableInSerializer: Boolean = configuration.getBoolean(JVMConfigurationKeys.USE_TYPE_TABLE)
-    val unifiedNullChecks: Boolean = languageVersionSettings.apiVersion >= ApiVersion.KOTLIN_1_4
+    val unifiedNullChecks: Boolean =
+        languageVersionSettings.apiVersion >= ApiVersion.KOTLIN_1_4 &&
+                !configuration.getBoolean(JVMConfigurationKeys.NO_UNIFIED_NULL_CHECKS)
     val functionsWithInlineClassReturnTypesMangled: Boolean =
         languageVersionSettings.supportsFeature(LanguageFeature.MangleClassMembersReturningInlineClasses)
 
     val rootContext: CodegenContext<*> = RootContext(this)
 
-    val classFileVersion: Int = target.bytecodeVersion
+    val classFileVersion: Int = run {
+        val minorVersion = if (configuration.getBoolean(JVMConfigurationKeys.ENABLE_JVM_PREVIEW)) 0xffff else 0
+        (minorVersion shl 16) + target.majorVersion
+    }
 
     val generateParametersMetadata: Boolean = configuration.getBoolean(JVMConfigurationKeys.PARAMETERS_METADATA)
 
@@ -278,7 +301,7 @@ class GenerationState private constructor(
             ?: if (languageVersionSettings.languageVersion >= LanguageVersion.LATEST_STABLE) JvmMetadataVersion.INSTANCE
             else JvmMetadataVersion(1, 1, 18)
 
-    val isIrWithStableAbi = configuration.getBoolean(JVMConfigurationKeys.IS_IR_WITH_STABLE_ABI)
+    val abiStability = configuration.get(JVMConfigurationKeys.ABI_STABILITY)
 
     val globalSerializationBindings = JvmSerializationBindings()
     var mapInlineClass: (ClassDescriptor) -> Type = { descriptor -> typeMapper.mapType(descriptor.defaultType) }
@@ -305,7 +328,8 @@ class GenerationState private constructor(
                         it
                     else
                         BuilderFactoryForDuplicateSignatureDiagnostics(
-                            it, this.bindingContext, diagnostics, this.moduleName, this.languageVersionSettings,
+                            it, bindingContext, diagnostics, this.moduleName, languageVersionSettings,
+                            useOldManglingSchemeForFunctionsWithInlineClassesInSignatures,
                             shouldGenerate = { origin -> !shouldOnlyCollectSignatures(origin) },
                         ).apply { duplicateSignatureFactory = this }
                 },
@@ -316,7 +340,7 @@ class GenerationState private constructor(
                 }
             )
             .wrapWith(ClassBuilderInterceptorExtension.getInstances(project)) { classBuilderFactory, extension ->
-                extension.interceptClassBuilderFactory(classBuilderFactory, bindingContext, diagnostics)
+                extension.interceptClassBuilderFactory(classBuilderFactory, originalFrontendBindingContext, diagnostics)
             }
 
         this.factory = ClassFileFactory(this, interceptedBuilderFactory)
@@ -325,7 +349,7 @@ class GenerationState private constructor(
     fun beforeCompile() {
         markUsed()
 
-        if (!isIrBackend || languageVersionSettings.getFlag(JvmAnalysisFlags.irCheckLocalNames)) {
+        if (!isIrBackend) {
             CodegenBinding.initTrace(this)
         }
     }

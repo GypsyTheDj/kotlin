@@ -26,10 +26,9 @@ dependencies {
     compile(kotlinStdlib())
     shadows(project(":kotlinx-metadata"))
     shadows(project(":core:compiler.common"))
-    // TODO: Get rid of this heavyweight dependency.
-    shadows(project(":core:descriptors"))
     shadows(project(":core:metadata"))
     shadows(project(":core:deserialization"))
+    shadows(project(":core:deserialization.common"))
     shadows(project(":compiler:serialization"))
     shadows(project(":kotlin-util-klib-metadata"))
     shadows(project(":kotlin-util-klib"))

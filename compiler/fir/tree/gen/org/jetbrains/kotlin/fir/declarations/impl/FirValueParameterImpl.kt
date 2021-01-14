@@ -1,11 +1,10 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.declarations.impl
 
-import org.jetbrains.kotlin.fir.FirImplementationDetail
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationAttributes
@@ -27,11 +26,12 @@ import org.jetbrains.kotlin.fir.visitors.*
  * DO NOT MODIFY IT MANUALLY
  */
 
-open class FirValueParameterImpl @FirImplementationDetail constructor(
+internal class FirValueParameterImpl(
     override val source: FirSourceElement?,
     override val session: FirSession,
     override var resolvePhase: FirResolvePhase,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
     override var returnTypeRef: FirTypeRef,
     override val name: Name,
     override val symbol: FirVariableSymbol<FirValueParameter>,
@@ -41,7 +41,6 @@ open class FirValueParameterImpl @FirImplementationDetail constructor(
     override val isNoinline: Boolean,
     override val isVararg: Boolean,
 ) : FirValueParameter() {
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     override val receiverTypeRef: FirTypeRef? get() = null
     override val initializer: FirExpression? get() = null
     override val delegate: FirExpression? get() = null
@@ -116,6 +115,8 @@ open class FirValueParameterImpl @FirImplementationDetail constructor(
     }
 
     override fun replaceReceiverTypeRef(newReceiverTypeRef: FirTypeRef?) {}
+
+    override fun replaceInitializer(newInitializer: FirExpression?) {}
 
     override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {
         controlFlowGraphReference = newControlFlowGraphReference

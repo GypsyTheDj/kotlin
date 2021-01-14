@@ -8,33 +8,35 @@ package org.jetbrains.kotlin.idea.fir.low.level.api.providers
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.NoMutableState
+import org.jetbrains.kotlin.fir.ThreadSafeMutableState
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.synthetic.FirSyntheticProperty
+import org.jetbrains.kotlin.fir.originalForSubstitutionOverride
 import org.jetbrains.kotlin.fir.resolve.providers.FirProvider
 import org.jetbrains.kotlin.fir.resolve.providers.FirProviderInternals
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProviderInternals
 import org.jetbrains.kotlin.fir.scopes.KotlinScopeProvider
-import org.jetbrains.kotlin.fir.symbols.impl.FirAccessorSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.idea.caches.project.ModuleSourceInfo
 import org.jetbrains.kotlin.idea.fir.low.level.api.IndexHelper
-import org.jetbrains.kotlin.idea.fir.low.level.api.PackageExistenceCheckerForMultipleModules
+import org.jetbrains.kotlin.idea.fir.low.level.api.PackageExistenceCheckerForSingleModule
 import org.jetbrains.kotlin.idea.fir.low.level.api.file.builder.FirFileBuilder
 import org.jetbrains.kotlin.idea.fir.low.level.api.file.builder.ModuleFileCache
-import org.jetbrains.kotlin.idea.fir.low.level.api.util.collectTransitiveDependenciesWithSelf
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
 
+@ThreadSafeMutableState
 internal class FirIdeProvider(
     project: Project,
     val session: FirSession,
     moduleInfo: ModuleSourceInfo,
-    private val kotlinScopeProvider: KotlinScopeProvider,
+    val kotlinScopeProvider: KotlinScopeProvider,
     firFileBuilder: FirFileBuilder,
     val cache: ModuleFileCache,
     searchScope: GlobalSearchScope,
@@ -42,10 +44,7 @@ internal class FirIdeProvider(
     override val symbolProvider: FirSymbolProvider = SymbolProvider()
 
     private val indexHelper = IndexHelper(project, searchScope)
-    private val packageExistenceChecker = PackageExistenceCheckerForMultipleModules(
-        project,
-        moduleInfo.collectTransitiveDependenciesWithSelf().filterIsInstance<ModuleSourceInfo>()
-    )
+    private val packageExistenceChecker = PackageExistenceCheckerForSingleModule(project, moduleInfo)
 
     private val providerHelper = FirProviderHelper(
         cache,
@@ -79,7 +78,7 @@ internal class FirIdeProvider(
 
 
     override fun getFirCallableContainerFile(symbol: FirCallableSymbol<*>): FirFile? {
-        symbol.overriddenSymbol?.let {
+        symbol.fir.originalForSubstitutionOverride?.symbol?.let {
             return getFirCallableContainerFile(it)
         }
         if (symbol is FirAccessorSymbol) {
@@ -97,7 +96,11 @@ internal class FirIdeProvider(
     // TODO move out of here
     // used only for completion
     fun buildFunctionWithBody(ktNamedFunction: KtNamedFunction): FirFunction<*> {
-        return RawFirBuilder(session, kotlinScopeProvider, stubMode = false).buildFunctionWithBody(ktNamedFunction)
+        return RawFirBuilder(session, kotlinScopeProvider).buildFunctionWithBody(ktNamedFunction)
+    }
+
+    fun buildPropertyWithBody(ktNamedFunction: KtProperty): FirProperty {
+        return RawFirBuilder(session, kotlinScopeProvider).buildPropertyWithBody(ktNamedFunction)
     }
 
 
@@ -116,6 +119,7 @@ internal class FirIdeProvider(
         return emptySet()
     }
 
+    @NoMutableState
     private inner class SymbolProvider : FirSymbolProvider(session) {
         override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<FirCallableSymbol<*>> =
             providerHelper.getTopLevelCallableSymbols(packageFqName, name)
@@ -123,6 +127,22 @@ internal class FirIdeProvider(
         @FirSymbolProviderInternals
         override fun getTopLevelCallableSymbolsTo(destination: MutableList<FirCallableSymbol<*>>, packageFqName: FqName, name: Name) {
             destination += getTopLevelCallableSymbols(packageFqName, name)
+        }
+
+        override fun getTopLevelFunctionSymbols(packageFqName: FqName, name: Name): List<FirNamedFunctionSymbol> =
+            providerHelper.getTopLevelFunctionSymbols(packageFqName, name)
+
+        @FirSymbolProviderInternals
+        override fun getTopLevelFunctionSymbolsTo(destination: MutableList<FirNamedFunctionSymbol>, packageFqName: FqName, name: Name) {
+            destination += getTopLevelFunctionSymbols(packageFqName, name)
+        }
+
+        override fun getTopLevelPropertySymbols(packageFqName: FqName, name: Name): List<FirPropertySymbol> =
+            providerHelper.getTopLevelPropertySymbols(packageFqName, name)
+
+        @FirSymbolProviderInternals
+        override fun getTopLevelPropertySymbolsTo(destination: MutableList<FirPropertySymbol>, packageFqName: FqName, name: Name) {
+            destination += getTopLevelPropertySymbols(packageFqName, name)
         }
 
         override fun getPackage(fqName: FqName): FqName? =

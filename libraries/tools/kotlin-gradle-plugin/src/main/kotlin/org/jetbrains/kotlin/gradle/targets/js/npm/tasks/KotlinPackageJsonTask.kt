@@ -11,6 +11,8 @@ import org.gradle.api.tasks.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
+import org.jetbrains.kotlin.gradle.targets.js.npm.PackageJson
+import org.jetbrains.kotlin.gradle.targets.js.npm.fakePackageJsonValue
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
 import org.jetbrains.kotlin.gradle.targets.js.npm.resolver.KotlinCompilationNpmResolver
 import org.jetbrains.kotlin.gradle.targets.js.npm.resolver.PACKAGE_JSON_UMBRELLA_TASK_NAME
@@ -19,14 +21,31 @@ import org.jetbrains.kotlin.gradle.tasks.registerTask
 import java.io.File
 
 open class KotlinPackageJsonTask : DefaultTask() {
+
+    init {
+        onlyIf {
+            nodeJs.npmResolutionManager.isConfiguringState()
+        }
+    }
+
     private lateinit var nodeJs: NodeJsRootExtension
+
+    @Transient
     private lateinit var compilation: KotlinJsCompilation
 
     private val compilationResolver
-        get() = nodeJs.npmResolutionManager.requireConfiguringState()[project][compilation]
+        get() = nodeJs.npmResolutionManager.resolver[project][compilation]
 
     private val producer: KotlinCompilationNpmResolver.PackageJsonProducer
         get() = compilationResolver.packageJsonProducer
+
+    @get:Input
+    val packageJsonCustomFields: Map<String, Any?> by lazy {
+        PackageJson(fakePackageJsonValue, fakePackageJsonValue)
+            .apply {
+                compilation.packageJsonHandlers.forEach { it() }
+            }.customFields
+    }
 
     private fun findDependentTasks(): Collection<Any> =
         producer.internalDependencies.map { dependentResolver ->
@@ -36,18 +55,21 @@ open class KotlinPackageJsonTask : DefaultTask() {
         }
 
     @get:Input
-    internal val toolsNpmDependencies: List<String>
-        get() = nodeJs.taskRequirements
+    internal val toolsNpmDependencies: List<String> by lazy {
+        nodeJs.taskRequirements
             .getCompilationNpmRequirements(compilation)
             .map { it.uniqueRepresentation() }
+    }
 
     @get:Nested
-    internal val producerInputs: KotlinCompilationNpmResolver.PackageJsonProducerInputs
-        get() = producer.inputs
+    internal val producerInputs: KotlinCompilationNpmResolver.PackageJsonProducerInputs by lazy {
+        producer.inputs
+    }
 
     @get:OutputFile
-    val packageJson: File
-        get() = compilationResolver.npmProject.prePackageJsonFile
+    val packageJson: File by lazy {
+        compilationResolver.npmProject.prePackageJsonFile
+    }
 
     @TaskAction
     fun resolve() {

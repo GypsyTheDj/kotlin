@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.types.expressions
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.ReflectionTypes
-import org.jetbrains.kotlin.builtins.functions.FunctionInvokeDescriptor
+import org.jetbrains.kotlin.builtins.functions.BuiltInFunctionArity
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.DefaultImplementation
@@ -15,8 +15,8 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
-import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Errors.*
+import org.jetbrains.kotlin.diagnostics.reportDiagnosticOnce
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
@@ -49,6 +49,7 @@ import org.jetbrains.kotlin.types.TypeUtils.NO_EXPECTED_TYPE
 import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.expressions.FunctionWithBigAritySupport.LanguageVersionDependent
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.createTypeInfo
+import org.jetbrains.kotlin.types.expressions.typeInfoFactory.noTypeInfo
 import org.jetbrains.kotlin.types.refinement.TypeRefinement
 import org.jetbrains.kotlin.types.typeUtil.*
 import org.jetbrains.kotlin.utils.yieldIfNotNull
@@ -540,6 +541,16 @@ class DoubleColonExpressionResolver(
 
         val (lhs, resolutionResults) = resolveCallableReference(expression, c, ResolveArgumentsMode.RESOLVE_FUNCTION_ARGUMENTS)
         val result = getCallableReferenceType(expression, lhs, resolutionResults, c)
+        val doesSomeExtensionReceiverContainsStubType =
+            resolutionResults != null && resolutionResults.resultingCalls.any { resolvedCall ->
+                resolvedCall.extensionReceiver?.type?.contains { it is StubType } == true
+            }
+
+        if (doesSomeExtensionReceiverContainsStubType) {
+            c.trace.reportDiagnosticOnce(TYPE_INFERENCE_POSTPONED_VARIABLE_IN_RECEIVER_TYPE.on(expression))
+            return noTypeInfo(c)
+        }
+
         val dataFlowInfo = (lhs as? DoubleColonLHS.Expression)?.dataFlowInfo ?: c.dataFlowInfo
 
         if (c.inferenceSession is CoroutineInferenceSession && result?.contains { it is StubType } == true) {
@@ -628,18 +639,18 @@ class DoubleColonExpressionResolver(
             createValueParametersForInvokeInFunctionType(functionDescriptor, type.arguments.dropLast(1)),
             type.arguments.last().type,
             Modality.FINAL,
-            Visibilities.PUBLIC
+            DescriptorVisibilities.PUBLIC
         )
 
         context.trace.record(BindingContext.FUNCTION, expression, functionDescriptor)
 
-        if (functionDescriptor.valueParameters.size >= FunctionInvokeDescriptor.BIG_ARITY &&
+        if (functionDescriptor.valueParameters.size >= BuiltInFunctionArity.BIG_ARITY &&
             bigAritySupport.shouldCheckLanguageVersionSettings &&
             !languageVersionSettings.supportsFeature(LanguageFeature.FunctionTypesWithBigArity)
         ) {
-            context.trace.report(Errors.UNSUPPORTED_FEATURE.on(
-                expression, LanguageFeature.FunctionTypesWithBigArity to languageVersionSettings
-            ))
+            context.trace.report(
+                UNSUPPORTED_FEATURE.on(expression, LanguageFeature.FunctionTypesWithBigArity to languageVersionSettings)
+            )
         }
     }
 
@@ -826,7 +837,7 @@ class DoubleColonExpressionResolver(
         ): Boolean {
             val receiver = receiverTypeFor(descriptor, lhs)?.let(::TransientReceiver)
             val setter = descriptor.setter
-            return descriptor.isVar && (setter == null || Visibilities.isVisible(receiver, setter, scopeOwnerDescriptor))
+            return descriptor.isVar && (setter == null || DescriptorVisibilities.isVisible(receiver, setter, scopeOwnerDescriptor))
         }
 
         fun createKCallableTypeForReference(

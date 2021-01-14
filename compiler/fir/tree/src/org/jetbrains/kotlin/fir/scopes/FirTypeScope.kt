@@ -5,8 +5,9 @@
 
 package org.jetbrains.kotlin.fir.scopes
 
+import org.jetbrains.kotlin.fir.isIntersectionOverride
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.name.Name
 
@@ -27,8 +28,8 @@ abstract class FirTypeScope : FirScope(), FirContainingNamesAwareScope {
     // - It may silently do nothing on symbols originated from different scope instance
     // - It may return the same overridden symbols more then once in case of substitution
     abstract fun processDirectOverriddenFunctionsWithBaseScope(
-        functionSymbol: FirFunctionSymbol<*>,
-        processor: (FirFunctionSymbol<*>, FirTypeScope) -> ProcessorAction
+        functionSymbol: FirNamedFunctionSymbol,
+        processor: (FirNamedFunctionSymbol, FirTypeScope) -> ProcessorAction
     ): ProcessorAction
 
     // ------------------------------------------------------------------------------------
@@ -42,8 +43,8 @@ abstract class FirTypeScope : FirScope(), FirContainingNamesAwareScope {
 
     object Empty : FirTypeScope() {
         override fun processDirectOverriddenFunctionsWithBaseScope(
-            functionSymbol: FirFunctionSymbol<*>,
-            processor: (FirFunctionSymbol<*>, FirTypeScope) -> ProcessorAction
+            functionSymbol: FirNamedFunctionSymbol,
+            processor: (FirNamedFunctionSymbol, FirTypeScope) -> ProcessorAction
         ): ProcessorAction = ProcessorAction.NEXT
 
         override fun processDirectOverriddenPropertiesWithBaseScope(
@@ -68,7 +69,7 @@ abstract class FirTypeScope : FirScope(), FirContainingNamesAwareScope {
                 ?: return baseScope.processDirectOverriddenCallables(callableSymbol, processor)
 
             for (overridden in directOverridden) {
-                if (overridden.isIntersectionOverride) {
+                if (overridden.fir.isIntersectionOverride) {
                     if (!baseScope.processDirectOverriddenCallables(overridden, processor)) return ProcessorAction.STOP
                 }
                 if (!processor(overridden, baseScope)) return ProcessorAction.STOP
@@ -79,9 +80,11 @@ abstract class FirTypeScope : FirScope(), FirContainingNamesAwareScope {
     }
 }
 
+typealias ProcessOverriddenWithBaseScope<D> = FirTypeScope.(D, (D, FirTypeScope) -> ProcessorAction) -> ProcessorAction
+
 fun FirTypeScope.processOverriddenFunctions(
-    functionSymbol: FirFunctionSymbol<*>,
-    processor: (FirFunctionSymbol<*>) -> ProcessorAction
+    functionSymbol: FirNamedFunctionSymbol,
+    processor: (FirNamedFunctionSymbol) -> ProcessorAction
 ): ProcessorAction =
     doProcessAllOverriddenCallables(
         functionSymbol,
@@ -101,24 +104,31 @@ fun FirTypeScope.processOverriddenProperties(
         mutableSetOf()
     )
 
+private fun <S : FirCallableSymbol<*>> FirTypeScope.doProcessAllOverriddenCallables(
+    callableSymbol: S,
+    processor: (S, FirTypeScope) -> ProcessorAction,
+    processDirectOverriddenCallablesWithBaseScope: FirTypeScope.(S, (S, FirTypeScope) -> ProcessorAction) -> ProcessorAction,
+    visited: MutableSet<S>
+): ProcessorAction {
+    if (!visited.add(callableSymbol)) return ProcessorAction.NONE
+    return processDirectOverriddenCallablesWithBaseScope(callableSymbol) { overridden, baseScope ->
+        if (!processor(overridden, baseScope)) return@processDirectOverriddenCallablesWithBaseScope ProcessorAction.STOP
+
+        baseScope.doProcessAllOverriddenCallables(overridden, processor, processDirectOverriddenCallablesWithBaseScope, visited)
+    }
+}
 
 private fun <S : FirCallableSymbol<*>> FirTypeScope.doProcessAllOverriddenCallables(
     callableSymbol: S,
     processor: (S) -> ProcessorAction,
     processDirectOverriddenCallablesWithBaseScope: FirTypeScope.(S, (S, FirTypeScope) -> ProcessorAction) -> ProcessorAction,
     visited: MutableSet<S>
-): ProcessorAction {
-    if (!visited.add(callableSymbol)) return ProcessorAction.NONE
-    return processDirectOverriddenCallablesWithBaseScope(callableSymbol) { overridden, baseScope ->
-        if (!processor(overridden)) return@processDirectOverriddenCallablesWithBaseScope ProcessorAction.STOP
-
-        baseScope.doProcessAllOverriddenCallables(overridden, processor, processDirectOverriddenCallablesWithBaseScope, visited)
-    }
-}
+): ProcessorAction =
+    doProcessAllOverriddenCallables(callableSymbol, { s, _ -> processor(s) }, processDirectOverriddenCallablesWithBaseScope, visited)
 
 inline fun FirTypeScope.processDirectlyOverriddenFunctions(
-    functionSymbol: FirFunctionSymbol<*>,
-    crossinline processor: (FirFunctionSymbol<*>) -> ProcessorAction
+    functionSymbol: FirNamedFunctionSymbol,
+    crossinline processor: (FirNamedFunctionSymbol) -> ProcessorAction
 ): ProcessorAction = processDirectOverriddenFunctionsWithBaseScope(functionSymbol) { overridden, _ ->
     processor(overridden)
 }
@@ -128,4 +138,26 @@ inline fun FirTypeScope.processDirectlyOverriddenProperties(
     crossinline processor: (FirPropertySymbol) -> ProcessorAction
 ): ProcessorAction = processDirectOverriddenPropertiesWithBaseScope(propertySymbol) { overridden, _ ->
     processor(overridden)
+}
+
+fun FirTypeScope.getDirectOverriddenFunctions(function: FirNamedFunctionSymbol): List<FirNamedFunctionSymbol> {
+    val overriddenFunctions = mutableSetOf<FirNamedFunctionSymbol>()
+
+    processDirectlyOverriddenFunctions(function) {
+        overriddenFunctions.add(it)
+        ProcessorAction.NEXT
+    }
+
+    return overriddenFunctions.toList()
+}
+
+fun FirTypeScope.getDirectOverriddenProperties(property: FirPropertySymbol): List<FirPropertySymbol> {
+    val overriddenProperties = mutableSetOf<FirPropertySymbol>()
+
+    processDirectlyOverriddenProperties(property) {
+        overriddenProperties.add(it)
+        ProcessorAction.NEXT
+    }
+
+    return overriddenProperties.toList()
 }

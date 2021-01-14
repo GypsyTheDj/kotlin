@@ -21,20 +21,21 @@ import org.jetbrains.kotlin.builtins.createFunctionType
 import org.jetbrains.kotlin.builtins.isKFunctionType
 import org.jetbrains.kotlin.builtins.isKSuspendFunctionType
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.declarations.DescriptorMetadataSource
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrValueParameter
-import org.jetbrains.kotlin.ir.declarations.MetadataSource
-import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
-import org.jetbrains.kotlin.ir.descriptors.WrappedValueParameterDescriptor
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrVariableSymbol
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
+import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
+import org.jetbrains.kotlin.ir.util.referenceClassifier
+import org.jetbrains.kotlin.ir.util.referenceFunction
+import org.jetbrains.kotlin.ir.util.withScope
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -46,7 +47,6 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.DoubleColonLHS
-import org.jetbrains.kotlin.utils.SmartList
 
 class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
 
@@ -153,35 +153,26 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
             resolvedCall.dispatchReceiver, resolvedCall.extensionReceiver,
             isSafe = false
         ).call { dispatchReceiverValue, extensionReceiverValue ->
-            val irAdapterRef = IrFunctionReferenceImpl(
-                startOffset, endOffset, irFunctionalType, irAdapterFun.symbol, irAdapterFun.typeParameters.size,
-                irAdapterFun.valueParameters.size, null, IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE
-            )
-
             val irDispatchReceiver = dispatchReceiverValue?.loadIfExists()
             val irExtensionReceiver = extensionReceiverValue?.loadIfExists()
             check(irDispatchReceiver == null || irExtensionReceiver == null) {
                 "Bound callable reference cannot have both receivers: $adapteeDescriptor"
             }
             val receiver = irDispatchReceiver ?: irExtensionReceiver
-
             if (receiver == null) {
                 IrFunctionExpressionImpl(
                     startOffset, endOffset, irFunctionalType, irAdapterFun, IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE
                 )
             } else {
-                val statements = SmartList<IrStatement>()
-                if (receiver.isSafeToUseWithoutCopying()) {
-                    irAdapterRef.extensionReceiver = receiver
-                } else {
-                    val irVariable = statementGenerator.scope.createTemporaryVariable(receiver, "receiver")
-                    irAdapterRef.extensionReceiver = IrGetValueImpl(startOffset, endOffset, irVariable.symbol)
-                    statements.add(irVariable)
+                // TODO add a bound receiver property to IrFunctionExpressionImpl?
+                val irAdapterRef = IrFunctionReferenceImpl(
+                    startOffset, endOffset, irFunctionalType, irAdapterFun.symbol, irAdapterFun.typeParameters.size,
+                    irAdapterFun.valueParameters.size, null, IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE
+                )
+                IrBlockImpl(startOffset, endOffset, irFunctionalType, IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE).apply {
+                    statements.add(irAdapterFun)
+                    statements.add(irAdapterRef.apply { extensionReceiver = receiver })
                 }
-                statements.add(irAdapterFun)
-                statements.add(irAdapterRef)
-
-                IrBlockImpl(startOffset, endOffset, irFunctionalType, IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE, statements)
             }
         }
     }
@@ -202,7 +193,7 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
             is IrConstructorSymbol ->
                 IrConstructorCallImpl.fromSymbolDescriptor(startOffset, endOffset, irType, adapteeSymbol)
             is IrSimpleFunctionSymbol ->
-                IrCallImpl(startOffset, endOffset, irType, adapteeSymbol, origin = null, superQualifierSymbol = null)
+                IrCallImpl.fromSymbolDescriptor(startOffset, endOffset, irType, adapteeSymbol)
             else -> error("Unknown symbol kind $adapteeSymbol")
         }
 
@@ -322,49 +313,41 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
         callBuilder: CallBuilder,
         callableReferenceType: KotlinType
     ): IrSimpleFunction {
-        val adapterFunctionDescriptor = WrappedSimpleFunctionDescriptor()
-
         val hasSuspendConversion = !adapteeDescriptor.isSuspend &&
                 callableReferenceType.isKSuspendFunctionType
 
-        return context.symbolTable.declareSimpleFunction(
-            adapterFunctionDescriptor
-        ) { irAdapterSymbol ->
-            context.irFactory.createFunction(
-                startOffset, endOffset,
-                IrDeclarationOrigin.ADAPTER_FOR_CALLABLE_REFERENCE,
-                irAdapterSymbol,
-                adapteeDescriptor.name,
-                Visibilities.LOCAL,
-                Modality.FINAL,
-                ktExpectedReturnType.toIrType(),
-                isInline = adapteeDescriptor.isInline, // TODO ?
-                isExternal = false,
-                isTailrec = false,
-                isSuspend = adapteeDescriptor.isSuspend || hasSuspendConversion,
-                isOperator = adapteeDescriptor.isOperator, // TODO ?
-                isInfix = adapteeDescriptor.isInfix,
-                isExpect = false,
-                isFakeOverride = false
-            ).also { irAdapterFun ->
-                adapterFunctionDescriptor.bind(irAdapterFun)
+        return context.irFactory.createFunction(
+            startOffset, endOffset,
+            IrDeclarationOrigin.ADAPTER_FOR_CALLABLE_REFERENCE,
+            IrSimpleFunctionSymbolImpl(),
+            adapteeDescriptor.name,
+            DescriptorVisibilities.LOCAL,
+            Modality.FINAL,
+            ktExpectedReturnType.toIrType(),
+            isInline = adapteeDescriptor.isInline, // TODO ?
+            isExternal = false,
+            isTailrec = false,
+            isSuspend = adapteeDescriptor.isSuspend || hasSuspendConversion,
+            isOperator = adapteeDescriptor.isOperator, // TODO ?
+            isInfix = adapteeDescriptor.isInfix,
+            isExpect = false,
+            isFakeOverride = false
+        ).also { irAdapterFun ->
+            context.symbolTable.withScope(irAdapterFun) {
+                irAdapterFun.metadata = DescriptorMetadataSource.Function(adapteeDescriptor)
 
-                context.symbolTable.withScope(adapterFunctionDescriptor) {
-                    irAdapterFun.metadata = MetadataSource.Function(adapteeDescriptor)
+                irAdapterFun.dispatchReceiverParameter = null
 
-                    irAdapterFun.dispatchReceiverParameter = null
+                val boundReceiver = callBuilder.original.selectBoundReceiver()
+                if (boundReceiver != null) {
+                    irAdapterFun.extensionReceiverParameter =
+                        createAdapterParameter(startOffset, endOffset, Name.identifier("receiver"), -1, boundReceiver.type)
+                } else {
+                    irAdapterFun.extensionReceiverParameter = null
+                }
 
-                    val boundReceiver = callBuilder.original.selectBoundReceiver()
-                    if (boundReceiver != null) {
-                        irAdapterFun.extensionReceiverParameter =
-                            createAdapterParameter(startOffset, endOffset, Name.identifier("receiver"), -1, boundReceiver.type)
-                    } else {
-                        irAdapterFun.extensionReceiverParameter = null
-                    }
-
-                    irAdapterFun.valueParameters += ktExpectedParameterTypes.mapIndexed { index, ktExpectedParameterType ->
-                        createAdapterParameter(startOffset, endOffset, Name.identifier("p$index"), index, ktExpectedParameterType)
-                    }
+                irAdapterFun.valueParameters += ktExpectedParameterTypes.mapIndexed { index, ktExpectedParameterType ->
+                    createAdapterParameter(startOffset, endOffset, Name.identifier("p$index"), index, ktExpectedParameterType)
                 }
             }
         }
@@ -380,24 +363,16 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
         }
     }
 
-    private fun createAdapterParameter(startOffset: Int, endOffset: Int, name: Name, index: Int, type: KotlinType): IrValueParameter {
-        val descriptor = WrappedValueParameterDescriptor()
-        return context.symbolTable.declareValueParameter(
-            startOffset, endOffset, IrDeclarationOrigin.ADAPTER_PARAMETER_FOR_CALLABLE_REFERENCE, descriptor, type.toIrType()
-        ) { irAdapterParameterSymbol ->
-            context.irFactory.createValueParameter(
-                startOffset, endOffset,
-                IrDeclarationOrigin.ADAPTER_PARAMETER_FOR_CALLABLE_REFERENCE,
-                irAdapterParameterSymbol,
-                name,
-                index,
-                type.toIrType(),
-                varargElementType = null, isCrossinline = false, isNoinline = false
-            ).also { irAdapterValueParameter ->
-                descriptor.bind(irAdapterValueParameter)
-            }
-        }
-    }
+    private fun createAdapterParameter(startOffset: Int, endOffset: Int, name: Name, index: Int, type: KotlinType): IrValueParameter =
+        context.irFactory.createValueParameter(
+            startOffset, endOffset,
+            IrDeclarationOrigin.ADAPTER_PARAMETER_FOR_CALLABLE_REFERENCE,
+            IrValueParameterSymbolImpl(),
+            name,
+            index,
+            type.toIrType(),
+            varargElementType = null, isCrossinline = false, isNoinline = false, isHidden = false, isAssignable = false
+        )
 
     fun generateCallableReference(
         ktElement: KtElement,
@@ -492,7 +467,7 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
         typeArguments: Map<TypeParameterDescriptor, KotlinType>?,
         origin: IrStatementOrigin?
     ): IrFunctionReference =
-        IrFunctionReferenceImpl(
+        IrFunctionReferenceImpl.fromSymbolDescriptor(
             startOffset, endOffset, type.toIrType(),
             symbol,
             typeArgumentsCount = descriptor.typeParametersCount,

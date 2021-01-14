@@ -18,7 +18,7 @@ import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.*
 import org.jetbrains.kotlin.idea.core.setVisibility
@@ -40,6 +40,7 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.isAncestorOf
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.utils.getImplicitReceiversHierarchy
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.capitalizeAsciiOnly
 import org.jetbrains.kotlin.util.containingNonLocalDeclaration
 
 class MoveKotlinMethodProcessor(
@@ -132,7 +133,7 @@ class MoveKotlinMethodProcessor(
             if (where == null || targetVariableIsMethodParameter()) return
             val targetDescriptor = targetVariable.resolveToDescriptorIfAny() as? DeclarationDescriptorWithVisibility
                 ?: return
-            if (!Visibilities.isVisibleIgnoringReceiver(targetDescriptor, where) && method.manager.isInProject(targetVariable)) {
+            if (!DescriptorVisibilities.isVisibleIgnoringReceiver(targetDescriptor, where) && method.manager.isInProject(targetVariable)) {
                 targetVariable.setVisibility(KtTokens.PUBLIC_KEYWORD)
             }
         }
@@ -197,7 +198,7 @@ class MoveKotlinMethodProcessor(
                             argumentExpression
                         } else return
                     } else {
-                        val getterName = "get${targetVariable.nameAsSafeName.identifier.capitalize()}"
+                        val getterName = "get${targetVariable.nameAsSafeName.identifier.capitalizeAsciiOnly()}"
                         JavaPsiFacade.getElementFactory(myProject).createExpressionFromText("${oldReceiver.text}.$getterName()", null)
                     }
 

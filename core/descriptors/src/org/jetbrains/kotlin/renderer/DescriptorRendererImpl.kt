@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.declaresOrInheritsDefaultValu
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.ErrorUtils.UninferredParameterTypeConstructor
 import org.jetbrains.kotlin.types.TypeUtils.CANT_INFER_FUNCTION_PARAM_TYPE
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 import java.util.*
 
 internal class DescriptorRendererImpl(
@@ -480,21 +481,21 @@ internal class DescriptorRendererImpl(
         }
     }
 
-    private fun renderVisibility(visibility: Visibility, builder: StringBuilder): Boolean {
+    private fun renderVisibility(visibility: DescriptorVisibility, builder: StringBuilder): Boolean {
         @Suppress("NAME_SHADOWING")
         var visibility = visibility
         if (DescriptorRendererModifier.VISIBILITY !in modifiers) return false
         if (normalizedVisibilities) {
             visibility = visibility.normalize()
         }
-        if (!renderDefaultVisibility && visibility == Visibilities.DEFAULT_VISIBILITY) return false
+        if (!renderDefaultVisibility && visibility == DescriptorVisibilities.DEFAULT_VISIBILITY) return false
         builder.append(renderKeyword(visibility.internalDisplayName)).append(" ")
         return true
     }
 
     private fun renderModality(modality: Modality, builder: StringBuilder, defaultModality: Modality) {
         if (!renderDefaultModality && modality == defaultModality) return
-        renderModifier(builder, DescriptorRendererModifier.MODALITY in modifiers, modality.name.toLowerCase())
+        renderModifier(builder, DescriptorRendererModifier.MODALITY in modifiers, modality.name.toLowerCaseAsciiOnly())
     }
 
     private fun MemberDescriptor.implicitModalityWithoutExtensions(): Modality {
@@ -506,7 +507,7 @@ internal class DescriptorRendererImpl(
         if (this.overriddenDescriptors.isNotEmpty()) {
             if (containingClassDescriptor.modality != Modality.FINAL) return Modality.OPEN
         }
-        return if (containingClassDescriptor.kind == ClassKind.INTERFACE && this.visibility != Visibilities.PRIVATE) {
+        return if (containingClassDescriptor.kind == ClassKind.INTERFACE && this.visibility != DescriptorVisibilities.PRIVATE) {
             if (this.modality == Modality.ABSTRACT) Modality.ABSTRACT else Modality.OPEN
         } else
             Modality.FINAL
@@ -538,7 +539,7 @@ internal class DescriptorRendererImpl(
     private fun renderMemberKind(callableMember: CallableMemberDescriptor, builder: StringBuilder) {
         if (DescriptorRendererModifier.MEMBER_KIND !in modifiers) return
         if (verbose && callableMember.kind != CallableMemberDescriptor.Kind.DECLARATION) {
-            builder.append("/*").append(callableMember.kind.name.toLowerCase()).append("*/ ")
+            builder.append("/*").append(callableMember.kind.name.toLowerCaseAsciiOnly()).append("*/ ")
         }
     }
 
@@ -982,6 +983,7 @@ internal class DescriptorRendererImpl(
             renderModifier(builder, DescriptorRendererModifier.INNER in modifiers && klass.isInner, "inner")
             renderModifier(builder, DescriptorRendererModifier.DATA in modifiers && klass.isData, "data")
             renderModifier(builder, DescriptorRendererModifier.INLINE in modifiers && klass.isInline, "inline")
+            renderModifier(builder, DescriptorRendererModifier.VALUE in modifiers && klass.isValue, "value")
             renderModifier(builder, DescriptorRendererModifier.FUN in modifiers && klass.isFun, "fun")
             renderClassKindPrefix(klass, builder)
         }

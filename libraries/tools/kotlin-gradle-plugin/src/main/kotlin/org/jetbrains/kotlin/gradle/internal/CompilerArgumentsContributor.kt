@@ -53,15 +53,6 @@ internal open class AbstractKotlinCompileArgumentsContributor<T : CommonCompiler
         args: T,
         flags: Collection<CompilerArgumentsConfigurationFlag>
     ) {
-        args.coroutinesState = when (coroutines.get()) {
-            Coroutines.ENABLE -> CommonCompilerArguments.ENABLE
-            Coroutines.WARN -> CommonCompilerArguments.WARN
-            Coroutines.ERROR -> CommonCompilerArguments.ERROR
-            Coroutines.DEFAULT -> CommonCompilerArguments.DEFAULT
-        }
-
-        logger.kotlinDebug { "args.coroutinesState=${args.coroutinesState}" }
-
         if (logger.isDebugEnabled) {
             args.verbose = true
         }
@@ -99,7 +90,7 @@ internal open class KotlinJvmCompilerArgumentsContributor(
         args.moduleName = moduleName
         logger.kotlinDebug { "args.moduleName = ${args.moduleName}" }
 
-        args.friendPaths = friendPaths
+        args.friendPaths = friendPaths.files.map { it.absolutePath }.toTypedArray()
         logger.kotlinDebug { "args.friendPaths = ${args.friendPaths?.joinToString() ?: "[]"}" }
 
         if (DefaultsOnly in flags) return

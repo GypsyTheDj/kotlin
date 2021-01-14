@@ -259,20 +259,27 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
         val isInlineFunPublicOrPublishedApi = inlineFunEffectiveVisibility.publicApi
         if (isInlineFunPublicOrPublishedApi &&
             !isCalledFunPublicOrPublishedApi &&
-            calledDescriptor.visibility !== Visibilities.LOCAL) {
+            calledDescriptor.visibility !== DescriptorVisibilities.LOCAL) {
             context.trace.report(NON_PUBLIC_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor, descriptor))
         } else {
             checkPrivateClassMemberAccess(calledDescriptor, expression, context)
         }
 
-        if (calledDescriptor !is ConstructorDescriptor &&
+        val isConstructorCall = calledDescriptor is ConstructorDescriptor
+        if ((!isConstructorCall || expression !is KtConstructorCalleeExpression) &&
             isInlineFunPublicOrPublishedApi &&
-            inlineFunEffectiveVisibility.toVisibility() !== Visibilities.PROTECTED &&
-            calledFunEffectiveVisibility.toVisibility() === Visibilities.PROTECTED) {
-            if (prohibitProtectedCallFromInline) {
-                context.trace.report(PROTECTED_CALL_FROM_PUBLIC_INLINE_ERROR.on(expression, calledDescriptor))
-            } else {
-                context.trace.report(PROTECTED_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor))
+            inlineFunEffectiveVisibility.toVisibility() !== Visibilities.Protected &&
+            calledFunEffectiveVisibility.toVisibility() === Visibilities.Protected) {
+            when {
+                isConstructorCall -> {
+                    context.trace.report(PROTECTED_CONSTRUCTOR_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor))
+                }
+                prohibitProtectedCallFromInline -> {
+                    context.trace.report(PROTECTED_CALL_FROM_PUBLIC_INLINE_ERROR.on(expression, calledDescriptor))
+                }
+                else -> {
+                    context.trace.report(PROTECTED_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor))
+                }
             }
         }
     }

@@ -27,8 +27,9 @@ import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleI
 import org.jetbrains.kotlin.idea.codeInsight.gradle.facetSettings
 import org.jetbrains.kotlin.idea.codeInsight.gradle.legacyMppImportTestMinVersionForMaster
 import org.jetbrains.kotlin.idea.facet.KotlinFacet
+import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.rootManager
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.jetbrains.plugins.gradle.tooling.annotation.PluginTargetVersions
 import org.junit.Test
 
@@ -51,7 +52,9 @@ class MultiplatformProjectImportingTest : MultiplePluginVersionGradleImportingTe
     }
 
     private fun assertFileInModuleScope(file: VirtualFile, moduleName: String) {
-        assert(getModule(moduleName).getModuleWithDependenciesAndLibrariesScope(true).contains(file))
+        runReadAction {
+            assert(getModule(moduleName).getModuleWithDependenciesAndLibrariesScope(true).contains(file))
+        }
     }
 
     @Test
@@ -234,7 +237,7 @@ class MultiplatformProjectImportingTest : MultiplePluginVersionGradleImportingTe
 
         createProjectSubFile(
             "local.properties", """
-            sdk.dir=/${KotlinTestUtils.getAndroidSdkSystemIndependentPath()}
+            sdk.dir=/${KtTestUtil.getAndroidSdkSystemIndependentPath()}
         """
         )
 
@@ -265,7 +268,7 @@ class MultiplatformProjectImportingTest : MultiplePluginVersionGradleImportingTe
 
         createProjectSubFile(
             "local.properties", """
-            sdk.dir=/${KotlinTestUtils.getAndroidSdkSystemIndependentPath()}
+            sdk.dir=/${KtTestUtil.getAndroidSdkSystemIndependentPath()}
         """
         )
 
@@ -320,13 +323,14 @@ class MultiplatformProjectImportingTest : MultiplePluginVersionGradleImportingTe
         )
     }
 
-    @Test
-    @PluginTargetVersions(gradleVersionForLatestPlugin = legacyMppImportTestMinVersionForMaster)
+
+    //BUNCH(203): @Test enable after updating platform (may require updating android gradle plugin in testdata)
+    @PluginTargetVersions(gradleVersion = "<6.0", pluginVersion = "1.4.10")
     fun testJsTestOutputFileInProjectWithAndroid() {
         configureByFiles()
         createProjectSubFile(
             "local.properties", """
-            sdk.dir=/${KotlinTestUtils.getAndroidSdkSystemIndependentPath()}
+            sdk.dir=/${KtTestUtil.getAndroidSdkSystemIndependentPath()}
         """
         )
 

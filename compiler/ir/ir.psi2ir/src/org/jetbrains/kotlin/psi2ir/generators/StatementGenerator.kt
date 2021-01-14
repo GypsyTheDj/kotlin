@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
+import org.jetbrains.kotlin.backend.common.BackendException
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
@@ -36,6 +37,7 @@ import org.jetbrains.kotlin.psi2ir.intermediate.IntermediateValue
 import org.jetbrains.kotlin.psi2ir.intermediate.createTemporaryVariableInBlock
 import org.jetbrains.kotlin.psi2ir.intermediate.setExplicitReceiverValue
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.BindingContext.SMARTCAST
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
@@ -73,7 +75,11 @@ class StatementGenerator(
     private fun KtElement.genStmt(): IrStatement =
         try {
             deparenthesize().accept(this@StatementGenerator, null)
-        } catch (e: Exception) {
+        } catch (e: BackendException) {
+            throw e
+        } catch (e: ErrorExpressionException) {
+            throw e
+        } catch (e: Throwable) {
             ErrorExpressionGenerator(this@StatementGenerator).generateErrorExpression(this, e)
         }
 
@@ -322,7 +328,8 @@ class StatementGenerator(
     ): IrExpression =
         CallGenerator(this).generateValueReference(
             expression.startOffsetSkippingComments, expression.endOffset,
-            descriptor, resolvedCall, null
+            descriptor, resolvedCall, null,
+            context.bindingContext.get(SMARTCAST, expression)?.defaultType?.toIrType()
         )
 
     override fun visitCallExpression(expression: KtCallExpression, data: Nothing?): IrStatement {

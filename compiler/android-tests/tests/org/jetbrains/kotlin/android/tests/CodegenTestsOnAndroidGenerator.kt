@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.android.tests
 
-import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
@@ -23,10 +22,14 @@ import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.*
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Assert
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.Path
+import kotlin.io.path.createTempDirectory
 import kotlin.test.assertTrue
 
 data class ConfigurationKey(val kind: ConfigurationKind, val jdkKind: TestJdkKind, val configuration: String)
@@ -266,8 +269,7 @@ class CodegenTestsOnAndroidGenerator private constructor(private val pathManager
                     continue
                 }
 
-                val fullFileText =
-                    FileUtil.loadFile(file, true).replace("COROUTINES_PACKAGE", "kotlin.coroutines")
+                val fullFileText = FileUtil.loadFile(file, true)
 
                 if (fullFileText.contains("// WITH_COROUTINES")) {
                     if (fullFileText.contains("kotlin.coroutines.experimental")) continue
@@ -301,7 +303,9 @@ class CodegenTestsOnAndroidGenerator private constructor(private val pathManager
                         if (kind.withReflection) JVM8REFLECT else JVM8
                     } else if (kind.withReflection) REFLECT else COMMON
                     val filesHolder = holders.getOrPut(key) {
-                        FilesWriter(compiler, KotlinTestUtils.newConfiguration(kind, jdkKind, KotlinTestUtils.getAnnotationsJar()).apply {
+                        FilesWriter(compiler, KotlinTestUtils.newConfiguration(kind, jdkKind,
+                                                                               KtTestUtil.getAnnotationsJar()
+                        ).apply {
                             println("Creating new configuration by $key")
                             KotlinBaseTest.updateConfigurationByDirectivesInTestFiles(testFiles, this)
                         })
@@ -314,7 +318,7 @@ class CodegenTestsOnAndroidGenerator private constructor(private val pathManager
     }
 
     private fun createTestFiles(file: File, expectedText: String): List<KotlinBaseTest.TestFile> =
-        CodegenTestCase.createTestFilesFromFile(file, expectedText, "kotlin.coroutines", false, TargetBackend.JVM)
+        CodegenTestCase.createTestFilesFromFile(file, expectedText, false, TargetBackend.JVM)
 
     companion object {
         const val GRADLE_VERSION = "5.6.4" // update GRADLE_SHA_256 on change
@@ -339,20 +343,21 @@ class CodegenTestsOnAndroidGenerator private constructor(private val pathManager
 
         @Throws(IOException::class)
         internal fun writeAndroidSkdToLocalProperties(pathManager: PathManager) {
-            val sdkRoot = KotlinTestUtils.getAndroidSdkSystemIndependentPath()
+            val sdkRoot = KtTestUtil.getAndroidSdkSystemIndependentPath()
             println("Writing android sdk to local.properties: $sdkRoot")
             val file = File(pathManager.tmpFolder + "/local.properties")
             FileWriter(file).use { fw -> fw.write("sdk.dir=$sdkRoot") }
         }
 
+        @OptIn(ExperimentalPathApi::class)
         @JvmStatic
         fun main(args: Array<String>) {
-            val tmpFolder = createTempDir()
-            println("Created temporary folder for android tests: " + tmpFolder.absolutePath)
-            val rootFolder = File("")
-            val pathManager = PathManager(rootFolder.absolutePath, tmpFolder.absolutePath)
+            val tmpFolder = createTempDirectory().toAbsolutePath().toString()
+            println("Created temporary folder for android tests: $tmpFolder")
+            val rootFolder = Path("").toAbsolutePath().toString()
+            val pathManager = PathManager(rootFolder, tmpFolder)
             generate(pathManager, true)
-            println("Android test project is generated into " + tmpFolder.absolutePath + " folder")
+            println("Android test project is generated into $tmpFolder folder")
         }
     }
 }

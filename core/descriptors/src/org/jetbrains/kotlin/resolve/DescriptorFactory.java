@@ -35,10 +35,14 @@ import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.getB
 
 public class DescriptorFactory {
     private static class DefaultClassConstructorDescriptor extends ClassConstructorDescriptorImpl {
-        public DefaultClassConstructorDescriptor(@NotNull ClassDescriptor containingClass, @NotNull SourceElement source) {
+        public DefaultClassConstructorDescriptor(
+                @NotNull ClassDescriptor containingClass,
+                @NotNull SourceElement source,
+                boolean freedomForSealedInterfacesSupported
+        ) {
             super(containingClass, null, Annotations.Companion.getEMPTY(), true, Kind.DECLARATION, source);
             initialize(Collections.<ValueParameterDescriptor>emptyList(),
-                       getDefaultConstructorVisibility(containingClass));
+                       getDefaultConstructorVisibility(containingClass, freedomForSealedInterfacesSupported));
         }
     }
 
@@ -78,7 +82,7 @@ public class DescriptorFactory {
             boolean isDefault,
             boolean isExternal,
             boolean isInline,
-            @NotNull Visibility visibility,
+            @NotNull DescriptorVisibility visibility,
             @NotNull SourceElement sourceElement
     ) {
         PropertySetterDescriptorImpl setterDescriptor = new PropertySetterDescriptorImpl(
@@ -130,7 +134,11 @@ public class DescriptorFactory {
             @NotNull ClassDescriptor containingClass,
             @NotNull SourceElement source
     ) {
-        return new DefaultClassConstructorDescriptor(containingClass, source);
+        /*
+         * Language version settings are needed here only for computing default visibility of constructors of sealed classes
+         *   Since object can not be sealed class it's OK to pass default settings here
+         */
+        return new DefaultClassConstructorDescriptor(containingClass, source, false);
     }
 
     @NotNull
@@ -141,7 +149,7 @@ public class DescriptorFactory {
         return values.initialize(null, null, Collections.<TypeParameterDescriptor>emptyList(),
                                  Collections.<ValueParameterDescriptor>emptyList(),
                                  getBuiltIns(enumClass).getArrayType(Variance.INVARIANT, enumClass.getDefaultType()),
-                                 Modality.FINAL, Visibilities.PUBLIC);
+                                 Modality.FINAL, DescriptorVisibilities.PUBLIC);
     }
 
     @NotNull
@@ -159,7 +167,7 @@ public class DescriptorFactory {
         );
         return valueOf.initialize(null, null, Collections.<TypeParameterDescriptor>emptyList(),
                                   Collections.singletonList(parameterDescriptor), enumClass.getDefaultType(),
-                                  Modality.FINAL, Visibilities.PUBLIC);
+                                  Modality.FINAL, DescriptorVisibilities.PUBLIC);
     }
 
     public static boolean isEnumValuesMethod(@NotNull FunctionDescriptor descriptor) {

@@ -29,7 +29,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
 
         val classBuilder by builder {
             parents += annotationContainerBuilder
-            fields from klass without listOf("symbol", "resolvePhase", "attributes")
+            fields from klass without listOf("symbol", "resolvePhase")
         }
 
         builder(regularClass) {
@@ -53,7 +53,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
 
         val functionBuilder by builder {
             parents += annotationContainerBuilder
-            fields from function without listOf("symbol", "resolvePhase", "controlFlowGraphReference", "receiverTypeRef", "typeParameters", "attributes")
+            fields from function without listOf("symbol", "resolvePhase", "controlFlowGraphReference", "receiverTypeRef", "typeParameters")
         }
 
         val loopJumpBuilder by builder {
@@ -62,7 +62,13 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
 
         val abstractConstructorBuilder by builder {
             parents += functionBuilder
-            fields from constructor without listOf("isPrimary", "attributes")
+            fields from constructor without listOf("isPrimary")
+        }
+
+        val abstractFunctionCallBuilder by builder {
+            parents += qualifiedAccessBuilder
+            parents += callBuilder
+            fields from functionCall
         }
 
         for (constructorType in listOf("FirPrimaryConstructor", "FirConstructorImpl")) {
@@ -75,6 +81,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
 
         builder(constructor, "FirConstructorImpl") {
             openBuilder()
+            withCopy()
         }
 
         builder(field) {
@@ -148,9 +155,8 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             useTypes(emptyArgumentListType)
         }
 
-        builder(functionCall) {
-            parents += qualifiedAccessBuilder
-            parents += callBuilder
+        val configurationForFunctionCallBuilder: LeafBuilderConfigurationContext.() -> Unit = {
+            parents += abstractFunctionCallBuilder
             defaultNoReceivers()
             openBuilder()
             default("argumentList") {
@@ -158,6 +164,9 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             }
             useTypes(emptyArgumentListType)
         }
+
+        builder(functionCall, init = configurationForFunctionCallBuilder)
+        builder(implicitInvokeCall, init = configurationForFunctionCallBuilder)
 
         builder(qualifiedAccessExpression) {
             parents += qualifiedAccessBuilder
@@ -172,6 +181,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             parents += typeParametersOwnerBuilder
             defaultNull("getter", "setter", "containerSource", "delegateFieldSymbol")
             default("resolvePhase", "FirResolvePhase.RAW_FIR")
+            withCopy()
         }
 
         builder(typeOperatorCall) {
@@ -205,6 +215,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             defaultNull("body")
             default("contractDescription", "FirEmptyContractDescription")
             useTypes(emptyContractDescriptionType)
+            withCopy()
         }
 
         builder(whenExpression) {
@@ -214,7 +225,6 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
         }
 
         builder(resolvedTypeRef) {
-            defaultFalse("isSuspend")
             defaultNull("delegatedTypeRef")
             withCopy()
         }
@@ -223,23 +233,11 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             withCopy()
         }
 
-        builder(delegatedTypeRef) {
-            withCopy()
-        }
-
         builder(functionTypeRef) {
             withCopy()
         }
 
-        builder(resolvedFunctionTypeRef) {
-            withCopy()
-        }
-
         builder(implicitTypeRef) {
-            withCopy()
-        }
-
-        builder(composedSuperTypeRef) {
             withCopy()
         }
 
@@ -332,7 +330,8 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             expression to "FirExpressionStub",
             varargArgumentsExpression,
             checkedSafeCallSubject,
-            safeCallExpression
+            safeCallExpression,
+            arrayOfCall
         )
         elementsWithDefaultTypeRef.forEach {
             val (element, name) = when (it) {
@@ -351,7 +350,7 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
         // -----------------------------------------------------------------------
 
         findImplementationsWithElementInParents(annotationContainer) {
-            it.type !in setOf("FirDelegatedTypeRefImpl", "FirImplicitTypeRefImpl")
+            it.type !in setOf("FirImplicitTypeRefImpl")
         }.forEach {
             it.builder?.parents?.add(annotationContainerBuilder)
         }
@@ -373,12 +372,12 @@ object BuilderConfigurator : AbstractBuilderConfigurator<FirTreeBuilder>(FirTree
             defaultNull(it)
         }
 
-//        configureFieldInAllIntermediateBuilders(
-//            field = "attributes",
-//            fieldPredicate = { it.type == declarationAttributesType.type }
-//        ) {
-//
-//        }
+        configureFieldInAllLeafBuilders(
+            field = "attributes",
+            fieldPredicate = { it.type == declarationAttributesType.type }
+        ) {
+            default(it, "${declarationAttributesType.type}()")
+        }
     }
 
     private inline fun findImplementationsWithElementInParents(

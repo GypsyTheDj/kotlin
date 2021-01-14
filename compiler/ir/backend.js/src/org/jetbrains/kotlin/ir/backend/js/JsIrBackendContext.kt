@@ -16,7 +16,7 @@ import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.ir.*
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
 import org.jetbrains.kotlin.ir.backend.js.lower.JsInnerClassesSupport
-import org.jetbrains.kotlin.ir.backend.js.utils.OperatorNames
+import org.jetbrains.kotlin.ir.backend.js.utils.*
 import org.jetbrains.kotlin.ir.builders.declarations.addFunction
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrExternalPackageFragmentImpl
@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.ir.symbols.impl.DescriptorlessExternalPackageFragmen
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.types.impl.IrDynamicTypeImpl
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.js.config.ErrorTolerancePolicy
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -39,16 +40,14 @@ class JsIrBackendContext(
     override val irBuiltIns: IrBuiltIns,
     val symbolTable: SymbolTable,
     irModuleFragment: IrModuleFragment,
-    val additionalExportedDeclarations: Set<FqName>,
+    val additionalExportedDeclarationNames: Set<FqName>,
     override val configuration: CompilerConfiguration, // TODO: remove configuration from backend context
     override val scriptMode: Boolean = false,
-    override val es6mode: Boolean = false
+    override val es6mode: Boolean = false,
+    val propertyLazyInitialization: Boolean = false,
 ) : JsCommonBackendContext {
-    override val transformedFunction
-        get() = error("Use Mapping.inlineClassMemberToStatic instead")
-
-    override val lateinitNullableFields
-        get() = error("Use Mapping.lateInitFieldToNullableField instead")
+    val fileToInitializationFuns: MutableMap<IrFile, IrSimpleFunction?> = mutableMapOf()
+    val fileToInitializerPureness: MutableMap<IrFile, Boolean> = mutableMapOf()
 
     override val extractedLocalClasses: MutableSet<IrClass> = hashSetOf()
 
@@ -59,9 +58,12 @@ class JsIrBackendContext(
     override val irFactory: IrFactory = PersistentIrFactory
 
     val devMode = configuration[JSConfigurationKeys.DEVELOPER_MODE] ?: false
+    val errorPolicy = configuration[JSConfigurationKeys.ERROR_TOLERANCE_POLICY] ?: ErrorTolerancePolicy.DEFAULT
 
     val externalPackageFragment = mutableMapOf<IrFileSymbol, IrFile>()
     val externalDeclarations = hashSetOf<IrDeclaration>()
+
+    val additionalExportedDeclarations = mutableSetOf<IrDeclaration>()
 
     val bodilessBuiltInsPackageFragment: IrPackageFragment = IrExternalPackageFragmentImpl(
         DescriptorlessExternalPackageFragmentSymbol(),
@@ -72,9 +74,6 @@ class JsIrBackendContext(
     val declarationLevelJsModules = mutableListOf<IrDeclarationWithName>()
 
     private val internalPackageFragmentDescriptor = EmptyPackageFragmentDescriptor(builtIns.builtInsModule, FqName("kotlin.js.internal"))
-    val implicitDeclarationFile = run {
-        syntheticFile("implicitDeclarations", irModuleFragment)
-    }
 
     private fun syntheticFile(name: String, module: IrModuleFragment): IrFile {
         return IrFileImpl(object : SourceManager.FileEntry {
@@ -118,6 +117,9 @@ class JsIrBackendContext(
         get() = testContainerFuns
 
     override val mapping = JsMapping()
+
+    override val inlineClassesUtils = JsInlineClassesUtils(this)
+
     val innerClassesSupport = JsInnerClassesSupport(mapping, irFactory)
 
     companion object {
@@ -191,6 +193,9 @@ class JsIrBackendContext(
             override val defaultConstructorMarker =
                 symbolTable.referenceClass(context.getJsInternalClass("DefaultConstructorMarker"))
 
+            override val throwISE: IrSimpleFunctionSymbol =
+                symbolTable.referenceSimpleFunction(getFunctions(kotlinPackageFqn.child(Name.identifier("THROW_ISE"))).single())
+
             override val stringBuilder
                 get() = TODO("not implemented")
             override val copyRangeTo: Map<ClassDescriptor, IrSimpleFunctionSymbol>
@@ -215,16 +220,22 @@ class JsIrBackendContext(
             override val coroutineGetContext = symbolTable.referenceSimpleFunction(getJsInternalFunction(GET_COROUTINE_CONTEXT_NAME))
 
             override val returnIfSuspended = symbolTable.referenceSimpleFunction(getJsInternalFunction("returnIfSuspended"))
+
+            override val functionAdapter: IrClassSymbol
+                get() = TODO("Not implemented")
         }
 
         override fun unfoldInlineClassType(irType: IrType): IrType? {
-            return irType.getInlinedClass()?.typeWith()
+            return inlineClassesUtils.getInlinedClass(irType)?.typeWith()
         }
 
         override fun shouldGenerateHandlerParameterForDefaultBodyFun() = true
     }
 
     // classes forced to be loaded
+
+    val errorCodeSymbol: IrSimpleFunctionSymbol? =
+        if (errorPolicy.allowErrors) symbolTable.referenceSimpleFunction(getJsInternalFunction("errorCode")) else null
 
     val primitiveClassesObject = getIrClass(FqName("kotlin.reflect.js.internal.PrimitiveClasses"))
 

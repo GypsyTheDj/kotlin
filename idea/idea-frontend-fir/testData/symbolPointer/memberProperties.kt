@@ -1,36 +1,82 @@
 class A {
-    val x: Int = 10
-    val Int.y = this
+  val x: Int = 10
+  val Int.y get() = this
 }
 
 // SYMBOLS:
-KtFirPropertySymbol:
+KtFirKotlinPropertySymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
   callableIdIfNonLocal: A.x
+  dispatchType: A
+  getter: KtFirPropertyGetterSymbol(<getter>)
+  hasBackingField: true
+  hasGetter: true
+  hasSetter: false
+  initializer: 10
+  isConst: false
   isExtension: false
+  isLateInit: false
+  isOverride: false
   isVal: true
   modality: FINAL
   name: x
   origin: SOURCE
-  receiverType: kotlin/Int
+  receiverType: null
+  setter: null
   symbolKind: MEMBER
-  type: kotlin/Int
+  visibility: PUBLIC
 
-KtFirPropertySymbol:
+KtFirPropertyGetterSymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
+  dispatchType: null
+  hasBody: true
+  isDefault: false
+  isInline: false
+  isOverride: false
+  modality: FINAL
+  origin: SOURCE
+  symbolKind: TOP_LEVEL
+  visibility: PUBLIC
+
+KtFirKotlinPropertySymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
   callableIdIfNonLocal: A.y
+  dispatchType: A
+  getter: KtFirPropertyGetterSymbol(<getter>)
+  hasBackingField: false
+  hasGetter: true
+  hasSetter: false
+  initializer: null
+  isConst: false
   isExtension: true
+  isLateInit: false
+  isOverride: false
   isVal: true
   modality: FINAL
   name: y
   origin: SOURCE
-  receiverType: A
+  receiverType: [] kotlin/Int
+  setter: null
   symbolKind: MEMBER
-  type: A
+  visibility: PUBLIC
 
 KtFirClassOrObjectSymbol:
+  annotations: []
   classIdIfNonLocal: A
   classKind: CLASS
+  companionObject: null
+  isData: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
   modality: FINAL
   name: A
   origin: SOURCE
+  superTypes: [[] kotlin/Any]
   symbolKind: TOP_LEVEL
   typeParameters: []
+  visibility: PUBLIC

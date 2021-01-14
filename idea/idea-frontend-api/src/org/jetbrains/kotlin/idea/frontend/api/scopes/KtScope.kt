@@ -7,6 +7,8 @@ package org.jetbrains.kotlin.idea.frontend.api.scopes
 
 import org.jetbrains.kotlin.idea.frontend.api.ValidityTokenOwner
 import org.jetbrains.kotlin.idea.frontend.api.symbols.*
+import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtSymbolWithDeclarations
+import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtSymbolWithMembers
 import org.jetbrains.kotlin.idea.frontend.api.withValidityAssertion
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -14,37 +16,45 @@ import org.jetbrains.kotlin.name.Name
 interface KtScope : ValidityTokenOwner {
     // TODO check that names are accessible
     // maybe return some kind of lazy set
-    fun getAllNames(): Set<Name> = withValidityAssertion { getCallableNames() + getClassLikeSymbolNames() }
+    fun getAllNames(): Set<Name> = withValidityAssertion { getCallableNames() + getClassifierNames() }
 
     fun getCallableNames(): Set<Name>
-    fun getClassLikeSymbolNames(): Set<Name>
+    fun getClassifierNames(): Set<Name>
 
 
     fun getAllSymbols(): Sequence<KtSymbol> = withValidityAssertion {
         sequence {
             yieldAll(getCallableSymbols())
-            yieldAll(getClassClassLikeSymbols())
+            yieldAll(getClassifierSymbols())
+            yieldAll(getConstructors())
         }
     }
 
-    fun getCallableSymbols(): Sequence<KtCallableSymbol>
-    fun getClassClassLikeSymbols(): Sequence<KtClassLikeSymbol>
+    fun getCallableSymbols(nameFilter: KtScopeNameFilter = { true }): Sequence<KtCallableSymbol>
+    fun getClassifierSymbols(nameFilter: KtScopeNameFilter = { true }): Sequence<KtClassifierSymbol>
+    fun getConstructors(): Sequence<KtConstructorSymbol>
 
     fun containsName(name: Name): Boolean = withValidityAssertion {
-        name in getCallableNames() || name in getClassLikeSymbolNames()
+        name in getCallableNames() || name in getClassifierNames()
     }
 }
+
+typealias KtScopeNameFilter = (Name) -> Boolean
 
 interface KtCompositeScope : KtScope {
     val subScopes: List<KtScope>
 }
 
-interface KtMemberScope : KtScope {
-    val owner: KtClassOrObjectSymbol
+interface KtMemberScope : KtDeclarationScope<KtSymbolWithMembers> {
+    override val owner: KtSymbolWithMembers
 }
 
-interface KtDeclaredMemberScope : KtScope {
-    val owner: KtClassOrObjectSymbol
+interface KtDeclaredMemberScope : KtDeclarationScope<KtSymbolWithMembers> {
+    override val owner: KtSymbolWithMembers
+}
+
+interface KtDeclarationScope<out T : KtSymbolWithDeclarations> : KtScope {
+    val owner: T
 }
 
 interface KtPackageScope : KtScope, KtSubstitutedScope<KtPackageScope> {

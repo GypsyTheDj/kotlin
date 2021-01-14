@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.fir.scopes.jvm
 
 import org.jetbrains.kotlin.fir.declarations.FirFunction
 import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
+import org.jetbrains.kotlin.fir.symbols.StandardClassIds
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.impl.FirImplicitAnyTypeRef
 import org.jetbrains.kotlin.fir.types.impl.FirImplicitNullableAnyTypeRef
@@ -17,6 +18,12 @@ import org.jetbrains.kotlin.load.java.structure.JavaPrimitiveType
 import org.jetbrains.kotlin.load.java.structure.JavaTypeParameter
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+
+fun FirFunction<*>.computeJvmDescriptorReplacingKotlinToJava(): String =
+    computeJvmDescriptor()
+        .replace("kotlin/Any", "java/lang/Object")
+        .replace("kotlin/String", "java/lang/String")
+        .replace("kotlin/Throwable", "java/lang/Throwable")
 
 fun FirFunction<*>.computeJvmDescriptor(): String = buildString {
     if (this@computeJvmDescriptor is FirSimpleFunction) {
@@ -44,6 +51,7 @@ private fun StringBuilder.appendErasedType(typeRef: FirTypeRef) {
         klass.fqName?.let {
             append("L")
             append(it.asString().replace(".", "/"))
+            append(";")
         }
     }
 
@@ -57,14 +65,13 @@ private fun StringBuilder.appendErasedType(typeRef: FirTypeRef) {
                         is JavaTypeParameter -> {
                             val representative = classifier.upperBounds.firstOrNull { it.classifier is JavaClass }
                             if (representative == null) {
-                                append("Ljava/lang/Object")
+                                append("Ljava/lang/Object;")
                             } else {
                                 appendClass(representative.classifier as JavaClass)
                             }
                         }
                         else -> return
                     }
-                    append(";")
                 }
             }
         }
@@ -86,19 +93,30 @@ private fun StringBuilder.appendConeType(coneType: ConeKotlinType) {
     (coneType as? ConeClassLikeType)?.let {
         val classId = it.lookupTag.classId
         if (classId.packageFqName.toString() == "kotlin") {
-            PRIMITIVE_TYPE_SIGNATURE[classId.shortClassName.identifier]?.let {
-                append(it)
+            PRIMITIVE_TYPE_SIGNATURE[classId.shortClassName.identifier]?.let { signature ->
+                append(signature)
                 return
             }
         }
     }
 
     fun appendClassLikeType(type: ConeClassLikeType) {
-        append("L")
         val classId = type.lookupTag.classId
-        append(classId.packageFqName.asString().replace(".", "/"))
-        append("/")
-        append(classId.relativeClassName)
+        if (classId == StandardClassIds.Array) {
+            append("[")
+            type.typeArguments.forEach { typeArg ->
+                when (typeArg) {
+                    ConeStarProjection -> append("*")
+                    is ConeKotlinTypeProjection -> appendConeType(typeArg.type)
+                }
+            }
+        } else {
+            append("L")
+            append(classId.packageFqName.asString().replace(".", "/"))
+            append("/")
+            append(classId.relativeClassName)
+            append(";")
+        }
     }
 
     if (coneType is ConeClassErrorType) return
@@ -111,21 +129,18 @@ private fun StringBuilder.appendConeType(coneType: ConeKotlinType) {
                 it.coneType is ConeClassLikeType
             }
             if (representative == null || representative is FirImplicitNullableAnyTypeRef || representative is FirImplicitAnyTypeRef) {
-                append("Ljava/lang/Object")
+                append("Ljava/lang/Object;")
             } else {
                 appendClassLikeType(representative.coneTypeUnsafe())
             }
         }
         is ConeDefinitelyNotNullType -> {
             appendConeType(coneType.original)
-            return
         }
         is ConeFlexibleType -> {
             appendConeType(coneType.lowerBound)
-            return
         }
     }
-    append(";")
 }
 
 private val unitClassId = ClassId.topLevel(FqName("kotlin.Unit"))

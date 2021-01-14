@@ -61,10 +61,14 @@ public actual fun String?.equals(other: String?, ignoreCase: Boolean = false): B
  */
 @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
 public actual fun String.replace(oldChar: Char, newChar: Char, ignoreCase: Boolean = false): String {
-    if (!ignoreCase)
-        return (this as java.lang.String).replace(oldChar, newChar)
-    else
-        return splitToSequence(oldChar, ignoreCase = ignoreCase).joinToString(separator = newChar.toString())
+    // prefer case-insensitive platform implementation
+    if (!ignoreCase) return (this as java.lang.String).replace(oldChar, newChar)
+
+    return buildString(length) {
+        this@replace.forEach { c ->
+            append(if (c.equals(oldChar, ignoreCase)) newChar else c)
+        }
+    }
 }
 
 /**
@@ -72,9 +76,28 @@ public actual fun String.replace(oldChar: Char, newChar: Char, ignoreCase: Boole
  * with the specified [newValue] string.
  */
 @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
-public actual fun String.replace(oldValue: String, newValue: String, ignoreCase: Boolean = false): String =
-    splitToSequence(oldValue, ignoreCase = ignoreCase).joinToString(separator = newValue)
+public actual fun String.replace(oldValue: String, newValue: String, ignoreCase: Boolean = false): String {
+    run {
+        var occurrenceIndex: Int = indexOf(oldValue, 0, ignoreCase)
+        // FAST PATH: no match
+        if (occurrenceIndex < 0) return this
 
+        val oldValueLength = oldValue.length
+        val searchStep = oldValueLength.coerceAtLeast(1)
+        val newLengthHint = length - oldValueLength + newValue.length
+        if (newLengthHint < 0) throw OutOfMemoryError()
+        val stringBuilder = StringBuilder(newLengthHint)
+
+        var i = 0
+        do {
+            stringBuilder.append(this, i, occurrenceIndex).append(newValue)
+            i = occurrenceIndex + oldValueLength
+            if (occurrenceIndex >= length) break
+            occurrenceIndex = indexOf(oldValue, occurrenceIndex + searchStep, ignoreCase)
+        } while (occurrenceIndex > 0)
+        return stringBuilder.append(this, i, length).toString()
+    }
+}
 
 /**
  * Returns a new string with the first occurrence of [oldChar] replaced with [newChar].
@@ -97,19 +120,41 @@ public actual fun String.replaceFirst(oldValue: String, newValue: String, ignore
 
 /**
  * Returns a copy of this string converted to upper case using the rules of the default locale.
- *
- * @sample samples.text.Strings.toUpperCase
  */
 @kotlin.internal.InlineOnly
 public actual inline fun String.toUpperCase(): String = (this as java.lang.String).toUpperCase()
 
 /**
- * Returns a copy of this string converted to lower case using the rules of the default locale.
+ * Returns a copy of this string converted to upper case using Unicode mapping rules of the invariant locale.
  *
- * @sample samples.text.Strings.toLowerCase
+ * This function supports one-to-many and many-to-one character mapping,
+ * thus the length of the returned string can be different from the length of the original string.
+ *
+ * @sample samples.text.Strings.uppercase
+ */
+@SinceKotlin("1.4")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public actual inline fun String.uppercase(): String = (this as java.lang.String).toUpperCase(Locale.ROOT)
+
+/**
+ * Returns a copy of this string converted to lower case using the rules of the default locale.
  */
 @kotlin.internal.InlineOnly
 public actual inline fun String.toLowerCase(): String = (this as java.lang.String).toLowerCase()
+
+/**
+ * Returns a copy of this string converted to lower case using Unicode mapping rules of the invariant locale.
+ *
+ * This function supports one-to-many and many-to-one character mapping,
+ * thus the length of the returned string can be different from the length of the original string.
+ *
+ * @sample samples.text.Strings.lowercase
+ */
+@SinceKotlin("1.4")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public actual inline fun String.lowercase(): String = (this as java.lang.String).toLowerCase(Locale.ROOT)
 
 /**
  * Concatenates characters in this [CharArray] into a String.
@@ -565,14 +610,42 @@ public fun String.regionMatches(thisOffset: Int, other: String, otherOffset: Int
 /**
  * Returns a copy of this string converted to lower case using the rules of the specified locale.
  */
+@OptIn(ExperimentalStdlibApi::class)
 @kotlin.internal.InlineOnly
-public inline fun String.toLowerCase(locale: java.util.Locale): String = (this as java.lang.String).toLowerCase(locale)
+public inline fun String.toLowerCase(locale: java.util.Locale): String = lowercase(locale)
+
+/**
+ * Returns a copy of this string converted to lower case using the rules of the specified [locale].
+ *
+ * This function supports one-to-many and many-to-one character mapping,
+ * thus the length of the returned string can be different from the length of the original string.
+ *
+ * @sample samples.text.Strings.lowercaseLocale
+ */
+@SinceKotlin("1.4")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun String.lowercase(locale: Locale): String = (this as java.lang.String).toLowerCase(locale)
 
 /**
  * Returns a copy of this string converted to upper case using the rules of the specified locale.
  */
+@OptIn(ExperimentalStdlibApi::class)
 @kotlin.internal.InlineOnly
-public inline fun String.toUpperCase(locale: java.util.Locale): String = (this as java.lang.String).toUpperCase(locale)
+public inline fun String.toUpperCase(locale: java.util.Locale): String = uppercase(locale)
+
+/**
+ * Returns a copy of this string converted to upper case using the rules of the specified [locale].
+ *
+ * This function supports one-to-many and many-to-one character mapping,
+ * thus the length of the returned string can be different from the length of the original string.
+ *
+ * @sample samples.text.Strings.uppercaseLocale
+ */
+@SinceKotlin("1.4")
+@ExperimentalStdlibApi
+@kotlin.internal.InlineOnly
+public inline fun String.uppercase(locale: Locale): String = (this as java.lang.String).toUpperCase(locale)
 
 /**
  * Encodes the contents of this string using the specified character set and returns the resulting byte array.
@@ -611,19 +684,20 @@ public actual fun String.capitalize(): String {
  * The title case of a character is usually the same as its upper case with several exceptions.
  * The particular list of characters with the special title case form depends on the underlying platform.
  */
+@OptIn(ExperimentalStdlibApi::class)
 @SinceKotlin("1.4")
 @WasExperimental(ExperimentalStdlibApi::class)
-@kotlin.internal.LowPriorityInOverloadResolution
+@kotlin.internal.LowPriorityInOverloadResolution // To avoid conflicts in function references, as this function was introduced later than common capitalize()
 public fun String.capitalize(locale: Locale): String {
     if (isNotEmpty()) {
         val firstChar = this[0]
         if (firstChar.isLowerCase()) {
             return buildString {
-                val titleChar = firstChar.toTitleCase()
-                if (titleChar != firstChar.toUpperCase()) {
+                val titleChar = firstChar.titlecaseChar()
+                if (titleChar != firstChar.uppercaseChar()) {
                     append(titleChar)
                 } else {
-                    append(this@capitalize.substring(0, 1).toUpperCase(locale))
+                    append(this@capitalize.substring(0, 1).uppercase(locale))
                 }
                 append(this@capitalize.substring(1))
             }
@@ -646,11 +720,12 @@ public actual fun String.decapitalize(): String {
  * Returns a copy of this string having its first letter lowercased using the rules of the specified [locale],
  * or the original string, if it's empty or already starts with a lower case letter.
  */
+@OptIn(ExperimentalStdlibApi::class)
 @SinceKotlin("1.4")
 @WasExperimental(ExperimentalStdlibApi::class)
-@kotlin.internal.LowPriorityInOverloadResolution
+@kotlin.internal.LowPriorityInOverloadResolution // To avoid conflicts in function references, as this function was introduced later than common decapitalize()
 public fun String.decapitalize(locale: Locale): String {
-    return if (isNotEmpty() && !this[0].isLowerCase()) substring(0, 1).toLowerCase(locale) + substring(1) else this
+    return if (isNotEmpty() && !this[0].isLowerCase()) substring(0, 1).lowercase(locale) + substring(1) else this
 }
 
 /**

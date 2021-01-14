@@ -17,7 +17,7 @@
 package org.jetbrains.kotlin.ir.declarations.persistent
 
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.persistent.carriers.Carrier
@@ -35,8 +35,8 @@ internal class PersistentIrField(
     origin: IrDeclarationOrigin,
     override val symbol: IrFieldSymbol,
     override val name: Name,
-    override val type: IrType,
-    override var visibility: Visibility,
+    type: IrType,
+    override var visibility: DescriptorVisibility,
     override val isFinal: Boolean,
     override val isExternal: Boolean,
     override val isStatic: Boolean
@@ -92,6 +92,16 @@ internal class PersistentIrField(
         set(v) {
             if (metadata !== v) {
                 setCarrier().metadataField = v
+            }
+        }
+
+    override var typeField: IrType = type
+
+    override var type: IrType
+        get() = getCarrier().typeField
+        set(v) {
+            if (type !== v) {
+                setCarrier().typeField = v
             }
         }
 }

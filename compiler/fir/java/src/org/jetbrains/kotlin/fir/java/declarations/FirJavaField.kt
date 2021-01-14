@@ -6,10 +6,10 @@
 package org.jetbrains.kotlin.fir.java.declarations
 
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.FirImplementationDetail
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSourceElement
-import org.jetbrains.kotlin.fir.Visibility
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.builder.FirFieldBuilder
@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.symbols.impl.FirDelegateFieldSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirFieldSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
@@ -39,8 +40,11 @@ class FirJavaField @FirImplementationDetail constructor(
     override var returnTypeRef: FirTypeRef,
     override var status: FirDeclarationStatus,
     override val isVar: Boolean,
-    override val annotations: MutableList<FirAnnotationCall>,
+    annotationBuilder: () -> List<FirAnnotationCall>,
     override val typeParameters: MutableList<FirTypeParameter>,
+    override var initializer: FirExpression?,
+    override val dispatchReceiverType: ConeKotlinType?,
+    override val attributes: FirDeclarationAttributes,
 ) : FirField() {
     init {
         symbol.bind(this)
@@ -54,7 +58,8 @@ class FirJavaField @FirImplementationDetail constructor(
     override val origin: FirDeclarationOrigin
         get() = FirDeclarationOrigin.Java
 
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
+    override val annotations: List<FirAnnotationCall> by lazy { annotationBuilder() }
+
 
     override fun <D> transformReturnTypeRef(transformer: FirTransformer<D>, data: D): FirField {
         returnTypeRef = returnTypeRef.transformSingle(transformer, data)
@@ -71,6 +76,7 @@ class FirJavaField @FirImplementationDetail constructor(
 
     override fun <D> transformOtherChildren(transformer: FirTransformer<D>, data: D): FirField {
         transformAnnotations(transformer, data)
+        initializer = initializer?.transformSingle(transformer, data)
         return this
     }
 
@@ -86,6 +92,7 @@ class FirJavaField @FirImplementationDetail constructor(
         returnTypeRef.accept(visitor, data)
         annotations.forEach { it.accept(visitor, data) }
         typeParameters.forEach { it.accept(visitor, data) }
+        initializer?.accept(visitor, data)
     }
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirJavaField {
@@ -105,8 +112,11 @@ class FirJavaField @FirImplementationDetail constructor(
     }
 
     override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirJavaField {
-        annotations.transformInplace(transformer, data)
         return this
+    }
+
+    override fun replaceInitializer(newInitializer: FirExpression?) {
+        initializer = newInitializer
     }
 
     override fun <D> transformTypeParameters(transformer: FirTransformer<D>, data: D): FirField {
@@ -115,9 +125,6 @@ class FirJavaField @FirImplementationDetail constructor(
     }
 
     override val delegate: FirExpression?
-        get() = null
-
-    override val initializer: FirExpression?
         get() = null
 
     override val delegateFieldSymbol: FirDelegateFieldSymbol<FirField>?
@@ -141,6 +148,8 @@ internal class FirJavaFieldBuilder : FirFieldBuilder() {
     var modality: Modality? = null
     lateinit var visibility: Visibility
     var isStatic: Boolean by Delegates.notNull()
+    var initializer: FirExpression? = null
+    lateinit var annotationBuilder: () -> List<FirAnnotationCall>
 
     override var resolvePhase: FirResolvePhase = FirResolvePhase.ANALYZED_DEPENDENCIES
 
@@ -155,8 +164,11 @@ internal class FirJavaFieldBuilder : FirFieldBuilder() {
             returnTypeRef,
             status,
             isVar,
-            annotations,
+            annotationBuilder,
             typeParameters,
+            initializer,
+            dispatchReceiverType,
+            attributes,
         )
     }
 

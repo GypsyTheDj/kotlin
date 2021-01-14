@@ -8,6 +8,8 @@ package org.jetbrains.kotlin.idea.frontend.api.types
 import com.intellij.testFramework.LightProjectDescriptor
 import org.jetbrains.kotlin.idea.executeOnPooledThreadInReadAction
 import org.jetbrains.kotlin.idea.frontend.api.analyze
+import org.jetbrains.kotlin.idea.frontend.api.analyze
+import org.jetbrains.kotlin.idea.frontend.api.components.KtTypeRendererOptions
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
@@ -46,7 +48,8 @@ class KtTypeRendererTest : KotlinLightCodeInsightFixtureTestCase() {
         val property = fakeKtFile.declarations.single() as KtProperty
         val renderedType = executeOnPooledThreadInReadAction {
             analyze(fakeKtFile) {
-                val ktType = property.getReturnKtType()
+                val ktType = property.initializer?.getKtType()
+                    ?: error("fake property should have initializer")
                 ktType.render(rendererOptions)
             }
         }

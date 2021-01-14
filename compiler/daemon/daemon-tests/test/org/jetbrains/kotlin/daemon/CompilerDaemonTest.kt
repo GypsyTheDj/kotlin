@@ -27,7 +27,7 @@ import org.jetbrains.kotlin.daemon.client.*
 import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.integration.KotlinIntegrationTestBase
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.jetbrains.kotlin.utils.KotlinPaths
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -36,10 +36,13 @@ import java.lang.management.ManagementFactory
 import java.net.URL
 import java.net.URLClassLoader
 import java.nio.charset.Charset
+import java.nio.file.Path
 import java.rmi.server.UnicastRemoteObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.invariantSeparatorsPath
 import kotlin.script.dependencies.Environment
 import kotlin.script.dependencies.ScriptContents
 import kotlin.script.experimental.dependencies.DependenciesResolver
@@ -92,8 +95,8 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             assertEquals("build results differ", AbstractCliTest.removePerfOutput(res1.out), AbstractCliTest.removePerfOutput(res2.out))
     }
 
-    private fun getTestBaseDir(): String = KotlinTestUtils.getTestDataPathBase() + "/integration/smoke/" + getTestName(true)
-    private fun getHelloAppBaseDir(): String = KotlinTestUtils.getTestDataPathBase() + "/integration/smoke/helloApp"
+    private fun getTestBaseDir(): String = KtTestUtil.getTestDataPathBase() + "/integration/smoke/" + getTestName(true)
+    private fun getHelloAppBaseDir(): String = KtTestUtil.getTestDataPathBase() + "/integration/smoke/helloApp"
 
     private fun run(logName: String, vararg args: String): Int = runJava(getTestBaseDir(), logName, *args)
 
@@ -997,9 +1000,12 @@ internal inline fun withLogFile(prefix: String, suffix: String = ".log", printLo
 // if file path is given in windows form (using backslash as a separator); the reason is unknown
 // this function makes a path with forward slashed, that works on windows too
 internal val File.loggerCompatiblePath: String
-    get() =
-        if (OSKind.current == OSKind.Windows) absolutePath.replace('\\', '/')
-        else absolutePath
+    get() = invariantSeparatorsPath
+
+@OptIn(ExperimentalPathApi::class)
+internal val Path.loggerCompatiblePath: String
+    get() = invariantSeparatorsPath
+
 
 open class TestKotlinScriptDummyDependenciesResolver : DependenciesResolver {
 

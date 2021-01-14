@@ -34,7 +34,7 @@ internal class PersistentIrClass(
     override val symbol: IrClassSymbol,
     override val name: Name,
     override val kind: ClassKind,
-    visibility: Visibility,
+    visibility: DescriptorVisibility,
     modality: Modality,
     override val isCompanion: Boolean = false,
     override val isInner: Boolean = false,
@@ -66,9 +66,9 @@ internal class PersistentIrClass(
     override val descriptor: ClassDescriptor
         get() = symbol.descriptor
 
-    override var visibilityField: Visibility = visibility
+    override var visibilityField: DescriptorVisibility = visibility
 
-    override var visibility: Visibility
+    override var visibility: DescriptorVisibility
         get() = getCarrier().visibilityField
         set(v) {
             if (visibility !== v) {

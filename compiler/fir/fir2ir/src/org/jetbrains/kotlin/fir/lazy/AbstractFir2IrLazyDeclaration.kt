@@ -15,11 +15,11 @@ import org.jetbrains.kotlin.ir.declarations.lazy.lazyVar
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import kotlin.properties.ReadWriteProperty
 
-interface AbstractFir2IrLazyDeclaration<F : FirMemberDeclaration, D : IrSymbolOwner> :
+interface AbstractFir2IrLazyDeclaration<F : FirMemberDeclaration, D : IrDeclaration> :
     IrDeclaration, IrDeclarationParent, Fir2IrComponents {
 
     val fir: F
-    val symbol: Fir2IrBindableSymbol<*, D>
+    override val symbol: Fir2IrBindableSymbol<*, D>
 
     override val factory: IrFactory
         get() = irFactory
@@ -32,7 +32,7 @@ interface AbstractFir2IrLazyDeclaration<F : FirMemberDeclaration, D : IrSymbolOw
             classifierStorage.getIrTypeParameter(typeParameter, index).apply {
                 parent = this@AbstractFir2IrLazyDeclaration
                 if (superTypes.isEmpty()) {
-                    typeParameter.bounds.mapTo(superTypes) { it.toIrType(typeConverter) }
+                    superTypes = typeParameter.bounds.map { it.toIrType(typeConverter) }
                 }
             }
         }

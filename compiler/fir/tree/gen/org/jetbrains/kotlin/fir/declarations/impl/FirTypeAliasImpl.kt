@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -29,6 +29,7 @@ internal class FirTypeAliasImpl(
     override val session: FirSession,
     override var resolvePhase: FirResolvePhase,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
     override var status: FirDeclarationStatus,
     override val typeParameters: MutableList<FirTypeParameter>,
     override val name: Name,
@@ -36,8 +37,6 @@ internal class FirTypeAliasImpl(
     override var expandedTypeRef: FirTypeRef,
     override val annotations: MutableList<FirAnnotationCall>,
 ) : FirTypeAlias() {
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
-
     init {
         symbol.bind(this)
     }

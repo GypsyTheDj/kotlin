@@ -20,6 +20,8 @@ import kotlin.text.StringsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
 import org.jetbrains.kotlin.codegen.context.ClassContext;
+import org.jetbrains.kotlin.codegen.context.CodegenContext;
+import org.jetbrains.kotlin.codegen.context.FieldOwnerContext;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
 import org.jetbrains.kotlin.descriptors.*;
@@ -46,7 +48,9 @@ import org.jetbrains.org.objectweb.asm.commons.Method;
 import java.util.Collections;
 import java.util.Map;
 
-import static org.jetbrains.kotlin.codegen.AsmUtil.*;
+import static org.jetbrains.kotlin.codegen.AsmUtil.NO_FLAG_PACKAGE_PRIVATE;
+import static org.jetbrains.kotlin.codegen.AsmUtil.asmTypeByFqNameWithoutInnerClasses;
+import static org.jetbrains.kotlin.codegen.DescriptorAsmUtil.genAreEqualCall;
 import static org.jetbrains.kotlin.resolve.jvm.AsmTypes.*;
 import static org.jetbrains.org.objectweb.asm.Opcodes.*;
 
@@ -60,6 +64,7 @@ public class SamWrapperCodegen {
     private final SamType samType;
     private final MemberCodegen<?> parentCodegen;
     private final int visibility;
+    private final int classFlags;
     public static final String SAM_WRAPPER_SUFFIX = "$0";
 
     public SamWrapperCodegen(
@@ -74,6 +79,7 @@ public class SamWrapperCodegen {
         this.samType = samType;
         this.parentCodegen = parentCodegen;
         visibility = isInsideInline ? ACC_PUBLIC : NO_FLAG_PACKAGE_PRIVATE;
+        classFlags = visibility | ACC_FINAL | ACC_SUPER;
     }
 
     @NotNull
@@ -106,7 +112,7 @@ public class SamWrapperCodegen {
         SimpleFunctionDescriptor erasedInterfaceFunction = samType.getOriginalAbstractMethod().copy(
                 classDescriptor,
                 Modality.FINAL,
-                Visibilities.PUBLIC,
+                DescriptorVisibilities.PUBLIC,
                 CallableMemberDescriptor.Kind.SYNTHESIZED,
                 /*copyOverrides=*/ false
         );
@@ -119,7 +125,7 @@ public class SamWrapperCodegen {
         cv.defineClass(
                 file,
                 state.getClassFileVersion(),
-                ACC_FINAL | ACC_SUPER | visibility,
+                classFlags,
                 asmType.getInternalName(),
                 null,
                 OBJECT_TYPE.getInternalName(),
@@ -128,6 +134,8 @@ public class SamWrapperCodegen {
         cv.visitSource(file.getName(), null);
 
         WriteAnnotationUtilKt.writeSyntheticClassMetadata(cv, state);
+
+        generateInnerClassInformation(file, asmType, cv);
 
         // e.g. ASM type for Function2
         Type functionAsmType = typeMapper.mapType(functionType);
@@ -156,6 +164,24 @@ public class SamWrapperCodegen {
         cv.done();
 
         return asmType;
+    }
+
+    private void generateInnerClassInformation(@NotNull KtFile file, Type asmType, ClassBuilder cv) {
+        parentCodegen.addSyntheticAnonymousInnerClass(new SyntheticInnerClassInfo(asmType.getInternalName(), classFlags));
+        FieldOwnerContext<?> parentContext = parentCodegen.context;
+        CodegenContext<?> outerContext = MemberCodegen.getNonInlineOuterContext(parentContext);
+        assert outerContext != null :
+                "Outer context for SAM wrapper " + asmType.getInternalName() + " is null, parentContext:" + parentContext;
+        Type outerClassType = MemberCodegen.computeOuterClass(state.getTypeMapper(), state.getJvmDefaultMode(), file, outerContext);
+        assert outerClassType != null :
+                "Outer class for SAM wrapper " + asmType.getInternalName() + " is null, parentContext:" + parentContext;
+        Method enclosingMethod = MemberCodegen.computeEnclosingMethod(state.getTypeMapper(), outerContext);
+        cv.visitOuterClass(
+                outerClassType.getInternalName(),
+                enclosingMethod == null ? null : enclosingMethod.getName(),
+                enclosingMethod == null ? null : enclosingMethod.getDescriptor()
+        );
+        cv.visitInnerClass(asmType.getInternalName(), null, null, classFlags);
     }
 
     private void generateConstructor(Type ownerType, Type functionType, ClassBuilder cv) {
@@ -268,12 +294,12 @@ public class SamWrapperCodegen {
             if (!(descriptor instanceof CallableMemberDescriptor)) continue;
             CallableMemberDescriptor member = (CallableMemberDescriptor) descriptor;
             if (member.getModality() == Modality.ABSTRACT ||
-                Visibilities.isPrivate(member.getVisibility()) ||
-                member.getVisibility() == Visibilities.INVISIBLE_FAKE ||
+                DescriptorVisibilities.isPrivate(member.getVisibility()) ||
+                member.getVisibility() == DescriptorVisibilities.INVISIBLE_FAKE ||
                 DescriptorUtils.isMethodOfAny(member)) continue;
 
             for (Map.Entry<FunctionDescriptor, FunctionDescriptor> entry : CodegenUtil.INSTANCE.copyFunctions(
-                    member, member, classDescriptor, Modality.OPEN, Visibilities.PUBLIC, CallableMemberDescriptor.Kind.DECLARATION, false
+                    member, member, classDescriptor, Modality.OPEN, DescriptorVisibilities.PUBLIC, CallableMemberDescriptor.Kind.DECLARATION, false
             ).entrySet()) {
                 ClassBodyCodegen.generateDelegationToDefaultImpl(entry.getKey(), entry.getValue(), receiverType, functionCodegen, state, false);
             }

@@ -13,6 +13,11 @@ import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.builder.buildConstExpression
 import org.jetbrains.kotlin.fir.expressions.builder.buildQualifiedAccessExpression
+import org.jetbrains.kotlin.fir.declarations.FirRegularClass
+import org.jetbrains.kotlin.fir.declarations.FirValueParameter
+import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
+import org.jetbrains.kotlin.fir.expressions.FirConstExpression
+import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaClass
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaField
 import org.jetbrains.kotlin.fir.references.builder.buildResolvedNamedReference
@@ -25,6 +30,7 @@ import org.jetbrains.kotlin.fir.typeContext
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.jvm.FirJavaTypeRef
+import org.jetbrains.kotlin.load.java.JavaDefaultQualifiers
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames.DEFAULT_NULL_FQ_NAME
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames.DEFAULT_VALUE_FQ_NAME
 import org.jetbrains.kotlin.load.java.descriptors.AnnotationDefaultValue
@@ -37,6 +43,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.AbstractStrictEqualityTypeChecker
+import org.jetbrains.kotlin.types.ConstantValueKind
 import org.jetbrains.kotlin.types.RawType
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.kotlin.utils.extractRadix
@@ -82,22 +89,29 @@ private fun ConeKotlinType.enhanceConeKotlinType(
 ): ConeKotlinType {
     return when (this) {
         is ConeFlexibleType -> {
+            val needsFlexibleNullabilityAttribute = lowerBound.nullability != upperBound.nullability && !lowerBound.hasEnhancedNullability
             val lowerResult = lowerBound.enhanceInflexibleType(
-                session, TypeComponentPosition.FLEXIBLE_LOWER, qualifiers, index
+                session, TypeComponentPosition.FLEXIBLE_LOWER, qualifiers, index,
+                attributes = if (needsFlexibleNullabilityAttribute)
+                    lowerBound.attributes.withFlexible()
+                else
+                    lowerBound.attributes
             )
             val upperResult = upperBound.enhanceInflexibleType(
-                session, TypeComponentPosition.FLEXIBLE_UPPER, qualifiers, index
+                session, TypeComponentPosition.FLEXIBLE_UPPER, qualifiers, index, upperBound.attributes
             )
 
             when {
-                lowerResult === lowerBound && upperResult === upperBound -> this
+                !needsFlexibleNullabilityAttribute && lowerResult === lowerBound && upperResult === upperBound -> this
                 this is ConeRawType -> ConeRawType(lowerResult, upperResult)
                 else -> coneFlexibleOrSimpleType(
                     session, lowerResult, upperResult, isNotNullTypeParameter = qualifiers(index).isNotNullTypeParameter
                 )
             }
         }
-        is ConeSimpleKotlinType -> enhanceInflexibleType(session, TypeComponentPosition.INFLEXIBLE, qualifiers, index)
+        is ConeSimpleKotlinType -> enhanceInflexibleType(
+            session, TypeComponentPosition.INFLEXIBLE, qualifiers, index, attributes
+        )
         else -> this
     }
 }
@@ -152,7 +166,8 @@ private fun ConeKotlinType.enhanceInflexibleType(
     session: FirSession,
     position: TypeComponentPosition,
     qualifiers: IndexedJavaTypeQualifiers,
-    index: Int
+    index: Int,
+    attributes: ConeAttributes = this.attributes
 ): ConeKotlinType {
     require(this !is ConeFlexibleType) {
         "$this should not be flexible"
@@ -192,7 +207,7 @@ private fun ConeKotlinType.enhanceInflexibleType(
 
     if (!wereChangesInArgs && originalTag == enhancedTag && enhancedNullability == isNullable) return this
 
-    val enhancedType = enhancedTag.constructType(enhancedArguments, enhancedNullability)
+    val enhancedType = enhancedTag.constructType(enhancedArguments, enhancedNullability, attributes)
 
     // TODO: why all of these is needed
 //    val enhancement = if (effectiveQualifiers.isNotNullTypeParameter) NotNullTypeParameter(enhancedType) else enhancedType
@@ -243,7 +258,7 @@ private fun ConeClassifierLookupTag.enhanceMutability(
 
 internal data class TypeAndDefaultQualifiers(
     val type: FirTypeRef?, // null denotes '*' here
-    val defaultQualifiers: JavaTypeQualifiers?
+    val defaultQualifiers: JavaDefaultQualifiers?
 )
 
 internal fun FirTypeRef.typeArguments(): List<FirTypeProjection> =
@@ -289,15 +304,15 @@ internal fun ConeKotlinType.lexicalCastFrom(session: FirSession, value: String):
 
     val (number, radix) = extractRadix(value)
     return when (classId.relativeClassName.asString()) {
-        "Boolean" -> buildConstExpression(null, FirConstKind.Boolean, value.toBoolean())
-        "Char" -> buildConstExpression(null, FirConstKind.Char, value.singleOrNull() ?: return null)
-        "Byte" -> buildConstExpression(null, FirConstKind.Byte, number.toByteOrNull(radix) ?: return null)
-        "Short" -> buildConstExpression(null, FirConstKind.Short, number.toShortOrNull(radix) ?: return null)
-        "Int" -> buildConstExpression(null, FirConstKind.Int, number.toIntOrNull(radix) ?: return null)
-        "Long" -> buildConstExpression(null, FirConstKind.Long, number.toLongOrNull(radix) ?: return null)
-        "Float" -> buildConstExpression(null, FirConstKind.Float, value.toFloatOrNull() ?: return null)
-        "Double" -> buildConstExpression(null, FirConstKind.Double, value.toDoubleOrNull() ?: return null)
-        "String" -> buildConstExpression(null, FirConstKind.String, value)
+        "Boolean" -> buildConstExpression(null, ConstantValueKind.Boolean, value.toBoolean())
+        "Char" -> buildConstExpression(null, ConstantValueKind.Char, value.singleOrNull() ?: return null)
+        "Byte" -> buildConstExpression(null, ConstantValueKind.Byte, number.toByteOrNull(radix) ?: return null)
+        "Short" -> buildConstExpression(null, ConstantValueKind.Short, number.toShortOrNull(radix) ?: return null)
+        "Int" -> buildConstExpression(null, ConstantValueKind.Int, number.toIntOrNull(radix) ?: return null)
+        "Long" -> buildConstExpression(null, ConstantValueKind.Long, number.toLongOrNull(radix) ?: return null)
+        "Float" -> buildConstExpression(null, ConstantValueKind.Float, value.toFloatOrNull() ?: return null)
+        "Double" -> buildConstExpression(null, ConstantValueKind.Double, value.toDoubleOrNull() ?: return null)
+        "String" -> buildConstExpression(null, ConstantValueKind.String, value)
         else -> null
     }
 }
@@ -318,3 +333,15 @@ internal fun FirValueParameter.getDefaultValueFromAnnotation(): AnnotationDefaul
 private val DEFAULT_VALUE_ID = ClassId.topLevel(DEFAULT_VALUE_FQ_NAME)
 private val DEFAULT_NULL_ID = ClassId.topLevel(DEFAULT_NULL_FQ_NAME)
 
+internal fun List<FirAnnotationCall>.computeTypeAttributesForJavaType(): ConeAttributes =
+    computeTypeAttributes { classId ->
+        when (classId) {
+            CompilerConeAttributes.EnhancedNullability.ANNOTATION_CLASS_ID -> add(CompilerConeAttributes.EnhancedNullability)
+            in NOT_NULL_ANNOTATION_IDS -> add(CompilerConeAttributes.EnhancedNullability)
+            JAVAX_NONNULL_ANNOTATION_ID,
+            JAVAX_CHECKFORNULL_ANNOTATION_ID,
+            COMPATQUAL_NONNULL_ANNOTATION_ID,
+            ANDROIDX_RECENTLY_NON_NULL_ANNOTATION_ID
+            -> add(CompilerConeAttributes.EnhancedNullability)
+        }
+    }

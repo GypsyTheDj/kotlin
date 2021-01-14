@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 ext.configureJavaOnlyJvm6Project = { Project project ->
     project.tasks.withType(JavaCompile) {
         sourceCompatibility = 1.6
@@ -6,6 +8,8 @@ ext.configureJavaOnlyJvm6Project = { Project project ->
         options.forkOptions.javaHome = file(JDK_16)
     }
 }
+
+List<String> tasksWithWarnings = (List<String>) rootProject.ext.get("tasksWithWarnings")
 
 ext.configureJvm6Project = { Project project ->
     project.configure(project) {
@@ -32,6 +36,14 @@ ext.configureJvm6Project = { Project project ->
             executable = "$JDK_16/bin/java"
         }
     }
+
+    project.tasks.withType(org.jetbrains.kotlin.gradle.dsl.KotlinCompile.class) { task ->
+        if (!tasksWithWarnings.contains(task.path)) {
+            task.kotlinOptions {
+                allWarningsAsErrors = true
+            }
+        }
+    }
 }
 
 ext.compileJava9Sources = { Project project, String moduleName, Collection<FileCollection> moduleOutputs = [project.sourceSets.main.output] ->
@@ -53,7 +65,8 @@ ext.compileJava9Sources = { Project project, String moduleName, Collection<FileC
 
             options.compilerArgs = [
                     '--module-path', modulePath.asPath,
-                    '--patch-module', "$moduleName=${moduleFiles.asPath}"
+                    '--patch-module', "$moduleName=${moduleFiles.asPath}",
+                    '-Xlint:-requires-transitive-automatic' // suppress automatic module transitive dependencies in kotlin.test
             ]
 
             classpath = files()
@@ -189,6 +202,14 @@ ext.configureLegacyPublishing = { Project project ->
         }
 
         task publish(dependsOn: uploadArchives)
+    }
+}
+
+ext.configureJvmIrBackend = { Project project ->
+    project.tasks.withType(KotlinCompile.class) { task ->
+        task.kotlinOptions {
+            useIR = project.kotlinBuildProperties.useIRForLibraries
+        }
     }
 }
 

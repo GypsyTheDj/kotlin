@@ -9,8 +9,8 @@ import org.jetbrains.kotlin.contracts.description.EventOccurrencesRange
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
-import org.jetbrains.kotlin.fir.Visibilities
-import org.jetbrains.kotlin.fir.Visibility
+import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.tree.generator.context.generatedType
 import org.jetbrains.kotlin.fir.tree.generator.context.type
 import org.jetbrains.kotlin.fir.types.ConeClassErrorType
@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.types.Variance
 
 val sourceElementType = type("fir", "FirSourceElement")
 val jumpTargetType = type("fir", "FirTarget")
-val constKindType = generatedType("expressions", "FirConstKind")
+val constKindType = type("types", "ConstantValueKind")
 val operationType = type("fir.expressions", "FirOperation")
 val classKindType = type(ClassKind::class)
 val eventOccurrencesRangeType = type(EventOccurrencesRange::class)

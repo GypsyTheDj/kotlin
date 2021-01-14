@@ -76,6 +76,7 @@ import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.uast.*
 import org.jetbrains.uast.kotlin.expressions.KotlinLocalFunctionUVariable
+import org.jetbrains.uast.kotlin.psi.UastDescriptorLightMethod
 import org.jetbrains.uast.kotlin.psi.UastFakeLightMethod
 import org.jetbrains.uast.kotlin.psi.UastFakeLightPrimaryConstructor
 import java.lang.ref.WeakReference
@@ -312,8 +313,8 @@ internal fun resolveToPsiMethod(
         is KtFunction ->
             if (source.isLocal)
                 getContainingLightClass(source)?.let { UastFakeLightMethod(source, it) }
-            else
-                LightClassUtil.getLightClassMethod(source)
+            else // UltraLightMembersCreator.createMethods() returns nothing for JVM-invisible methods, so fake it if we get null here
+                LightClassUtil.getLightClassMethod(source) ?: getContainingLightClass(source)?.let { UastFakeLightMethod(source, it) }
         is PsiMethod -> source
         null -> resolveDeserialized(context, descriptor) as? PsiMethod
         else -> null
@@ -425,7 +426,7 @@ private fun resolveDeserialized(
             psiClass.getMethodBySignature(
                 JvmProtoBufUtil.getJvmMethodSignature(proto, nameResolver, typeTable)
                     ?: getMethodSignatureFromDescriptor(context, descriptor)
-            )
+            ) ?: UastDescriptorLightMethod(descriptor as SimpleFunctionDescriptor, psiClass, context) // fake Java-invisible methods
         }
         is ProtoBuf.Constructor -> {
             val signature = JvmProtoBufUtil.getJvmConstructorSignature(proto, nameResolver, typeTable)

@@ -27,7 +27,7 @@ class IrLazyClass(
     override val descriptor: ClassDescriptor,
     override val name: Name,
     override val kind: ClassKind,
-    override var visibility: Visibility,
+    override var visibility: DescriptorVisibility,
     override var modality: Modality,
     override val isCompanion: Boolean,
     override val isInner: Boolean,

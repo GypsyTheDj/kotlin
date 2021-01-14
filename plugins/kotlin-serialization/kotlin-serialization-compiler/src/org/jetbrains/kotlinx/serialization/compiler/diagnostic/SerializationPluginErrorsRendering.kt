@@ -16,7 +16,9 @@ object SerializationPluginErrorsRendering : DefaultErrorMessages.Extension {
     init {
         MAP.put(
             SerializationErrors.INLINE_CLASSES_NOT_SUPPORTED,
-            "Inline classes are not supported by kotlinx.serialization yet"
+            "Inline classes require runtime serialization library version at least {0}, while your classpath has {1}.",
+            Renderers.STRING,
+            Renderers.STRING,
         )
         MAP.put(
             SerializationErrors.PLUGIN_IS_NOT_ENABLED,
@@ -54,8 +56,15 @@ object SerializationPluginErrorsRendering : DefaultErrorMessages.Extension {
         MAP.put(
             SerializationErrors.SERIALIZER_NULLABILITY_INCOMPATIBLE,
             "Type ''{1}'' is non-nullable and therefore can not be serialized with serializer for nullable type ''{0}''",
-            Renderers.RENDER_TYPE_WITH_ANNOTATIONS,
-            Renderers.RENDER_TYPE_WITH_ANNOTATIONS
+            Renderers.RENDER_TYPE,
+            Renderers.RENDER_TYPE
+        )
+        MAP.put(
+            SerializationErrors.SERIALIZER_TYPE_INCOMPATIBLE,
+            "Class ''{1}'', which is serializer for type ''{2}'', is applied here to type ''{0}''. This may lead to errors or incorrect behavior.",
+            Renderers.RENDER_TYPE,
+            Renderers.RENDER_TYPE,
+            Renderers.RENDER_TYPE
         )
         MAP.put(
             SerializationErrors.TRANSIENT_MISSING_INITIALIZER,

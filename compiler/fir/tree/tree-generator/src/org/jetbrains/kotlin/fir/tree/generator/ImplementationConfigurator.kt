@@ -113,6 +113,23 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             publicImplementation()
         }
 
+        impl(block, "FirLazyBlock") {
+            val error = """error("FirLazyBlock should be calculated before accessing")"""
+            default("statements") {
+                value = error
+                withGetter = true
+            }
+            default("annotations") {
+                value = error
+                withGetter = true
+            }
+            default("typeRef") {
+                value = error
+                withGetter = true
+            }
+            publicImplementation()
+        }
+
         impl(errorLoop) {
             default("block", "FirEmptyExpressionBlock()")
             default("condition", "FirErrorExpressionImpl(source, ConeStubDiagnostic(diagnostic))")
@@ -120,6 +137,19 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         }
 
         impl(expression, "FirExpressionStub") {
+            publicImplementation()
+        }
+
+        impl(expression, "FirLazyExpression") {
+            val error = """error("FirLazyExpression should be calculated before accessing")"""
+            default("typeRef") {
+                value = error
+                withGetter = true
+            }
+            default("annotations") {
+                value = error
+                withGetter = true
+            }
             publicImplementation()
         }
 
@@ -145,7 +175,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
                 withGetter = true
             }
             default("annotations", "mutableListOf()")
-            defaultFalse("isSuspend")
             useTypes(coneClassErrorTypeType)
         }
 
@@ -371,13 +400,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             useTypes(errorTypeRefImpl, coneStubDiagnosticType)
         }
 
-        impl(resolvedFunctionTypeRef) {
-            default("delegatedTypeRef") {
-                value = "null"
-                withGetter = true
-            }
-        }
-
         impl(errorFunction) {
             defaultNull("receiverTypeRef", "body", withGetter = true)
             default("returnTypeRef", "FirErrorTypeRefImpl(null, diagnostic)")
@@ -388,8 +410,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         impl(implicitTypeRef) {
             defaultEmptyList("annotations")
         }
-
-        impl(composedSuperTypeRef)
 
         impl(reference, "FirStubReference") {
             default("source") {
@@ -420,7 +440,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         }
 
         impl(valueParameter) {
-            kind = OpenClass
             defaultTrue("isVal", withGetter = true)
             defaultFalse("isVar", withGetter = true)
             defaultNull("getter", "setter", "initializer", "delegate", "receiverTypeRef", "delegateFieldSymbol", withGetter = true)
@@ -430,17 +449,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             default("name", "Name.identifier(\"value\")")
         }
 
-        impl(simpleFunction) {
-            kind = OpenClass
-        }
-
-        impl(delegatedTypeRef) {
-            listOf("source", "annotations").forEach {
-                default(it) {
-                    delegate = "typeRef"
-                }
-            }
-        }
+        impl(simpleFunction)
 
         impl(safeCallExpression) {
             useTypes(safeCallCheckedSubjectType)
@@ -462,7 +471,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         }
 
         val implementationWithConfigurableTypeRef = listOf(
-            "FirDelegatedTypeRefImpl",
             "FirTypeProjectionWithVarianceImpl",
             "FirCallableReferenceAccessImpl",
             "FirThisReceiverExpressionImpl",
@@ -479,6 +487,7 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
             "FirVarargArgumentsExpressionImpl",
             "FirSafeCallExpressionImpl",
             "FirCheckedSafeCallSubjectImpl",
+            "FirArrayOfCallImpl",
         )
         configureFieldInAllImplementations(
             field = "typeRef",
@@ -487,13 +496,6 @@ object ImplementationConfigurator : AbstractFirTreeImplementationConfigurator() 
         ) {
             default(it, "FirImplicitTypeRefImpl(null)")
             useTypes(implicitTypeRefType)
-        }
-
-        configureFieldInAllImplementations(
-            field = "attributes",
-            fieldPredicate = { it.type == declarationAttributesType.type }
-        ) {
-            default(it, "${declarationAttributesType.type}()")
         }
     }
 }

@@ -9,6 +9,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory0
 import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.psi.*
@@ -20,6 +21,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperInterfaces
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.hasBackingField
+import org.jetbrains.kotlin.resolve.isInlineClass
 import org.jetbrains.kotlin.resolve.isInlineClassType
 import org.jetbrains.kotlin.resolve.jvm.annotations.TRANSIENT_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor
@@ -121,8 +123,16 @@ open class SerializationPluginDeclarationChecker : DeclarationChecker {
             return false
         }
 
-        if (descriptor.isInline) {
-            trace.reportOnSerializableAnnotation(descriptor, SerializationErrors.INLINE_CLASSES_NOT_SUPPORTED)
+        if (descriptor.isInlineClass() && !canSupportInlineClasses(descriptor.module, trace)) {
+            descriptor.onSerializableAnnotation {
+                trace.report(
+                    SerializationErrors.INLINE_CLASSES_NOT_SUPPORTED.on(
+                        it,
+                        VersionReader.minVersionForInlineClasses.toString(),
+                        VersionReader.getVersionsForCurrentModuleFromTrace(descriptor.module, trace)?.implementationVersion.toString()
+                    )
+                )
+            }
             return false
         }
         if (!descriptor.hasSerializableAnnotationWithoutArgs) return false
@@ -218,6 +228,7 @@ open class SerializationPluginDeclarationChecker : DeclarationChecker {
             val ktType = (propertyPsi as? KtCallableDeclaration)?.typeReference
             if (serializer != null) {
                 val element = ktType?.typeElement
+                checkCustomSerializerMatch(it.module, it.type, it.descriptor, element, trace, propertyPsi)
                 checkSerializerNullability(it.type, serializer.defaultType, element, trace, propertyPsi)
                 generatorContextForAnalysis.checkTypeArguments(it.module, it.type, element, trace, propertyPsi)
             } else {
@@ -246,6 +257,11 @@ open class SerializationPluginDeclarationChecker : DeclarationChecker {
 
     private fun KotlinType.isUnsupportedInlineType() = isInlineClassType() && !KotlinBuiltIns.isPrimitiveTypeOrNullablePrimitiveType(this)
 
+    private fun canSupportInlineClasses(module: ModuleDescriptor, trace: BindingTrace): Boolean {
+        if (isIde) return true // do not get version from jar manifest in ide
+        return VersionReader.canSupportInlineClasses(module, trace)
+    }
+
     private fun AbstractSerialGenerator.checkType(
         module: ModuleDescriptor,
         type: KotlinType,
@@ -255,16 +271,43 @@ open class SerializationPluginDeclarationChecker : DeclarationChecker {
     ) {
         if (type.genericIndex != null) return // type arguments always have serializer stored in class' field
         val element = ktType?.typeElement
-        if (type.isUnsupportedInlineType()) {
-            trace.report(SerializationErrors.INLINE_CLASSES_NOT_SUPPORTED.on(element ?: fallbackElement))
+        if (type.isUnsupportedInlineType() && !canSupportInlineClasses(module, trace)) {
+            trace.report(SerializationErrors.INLINE_CLASSES_NOT_SUPPORTED.on(
+                element ?: fallbackElement,
+                VersionReader.minVersionForInlineClasses.toString(),
+                VersionReader.getVersionsForCurrentModuleFromTrace(module, trace)?.implementationVersion.toString()
+            ))
         }
         val serializer = findTypeSerializerOrContextUnchecked(module, type)
         if (serializer != null) {
+            checkCustomSerializerMatch(module, type, type, element, trace, fallbackElement)
             checkSerializerNullability(type, serializer.defaultType, element, trace, fallbackElement)
             checkTypeArguments(module, type, element, trace, fallbackElement)
         } else {
             trace.report(SerializationErrors.SERIALIZER_NOT_FOUND.on(element ?: fallbackElement, type))
         }
+    }
+
+    private fun checkCustomSerializerMatch(
+        module: ModuleDescriptor,
+        classType: KotlinType,
+        descriptor: Annotated,
+        element: KtElement?,
+        trace: BindingTrace,
+        fallbackElement: PsiElement
+    ) {
+        val serializerType = descriptor.annotations.serializableWith(module) ?: return
+        val serializerForType = serializerType.supertypes().find { isKSerializer(it) }?.arguments?.first()?.type ?: return
+        // Compare constructors because we do not care about generic arguments and nullability
+        if (classType.constructor != serializerForType.constructor)
+            trace.report(
+                SerializationErrors.SERIALIZER_TYPE_INCOMPATIBLE.on(
+                    element ?: fallbackElement,
+                    classType,
+                    serializerType,
+                    serializerForType
+                )
+            )
     }
 
     private fun checkSerializerNullability(
@@ -277,7 +320,8 @@ open class SerializationPluginDeclarationChecker : DeclarationChecker {
         // @Serializable annotation has proper signature so this error would be caught in type checker
         val castedToKSerial = serializerType.supertypes().find { isKSerializer(it) } ?: return
 
-        if (!classType.isMarkedNullable && castedToKSerial.arguments.first().type.isMarkedNullable)
+        val serializerForType = castedToKSerial.arguments.first().type
+        if (!classType.isMarkedNullable && serializerForType.isMarkedNullable)
             trace.report(
                 SerializationErrors.SERIALIZER_NULLABILITY_INCOMPATIBLE.on(element ?: fallbackElement, serializerType, classType),
             )

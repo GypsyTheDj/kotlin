@@ -6,6 +6,8 @@
 package org.jetbrains.kotlin.fir
 
 import org.jetbrains.kotlin.builtins.functions.FunctionClassKind
+import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.fir.contracts.*
 import org.jetbrains.kotlin.fir.contracts.description.ConeContractRenderer
@@ -25,6 +27,7 @@ import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirVisitorVoid
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
@@ -48,11 +51,29 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     abstract class RenderMode(
         val renderLambdaBodies: Boolean,
         val renderCallArguments: Boolean,
-        val renderCallableFqNames: Boolean
+        val renderCallableFqNames: Boolean,
+        val renderDeclarationResolvePhase: Boolean
     ) {
-        object Normal : RenderMode(renderLambdaBodies = true, renderCallArguments = true, renderCallableFqNames = false)
+        object Normal : RenderMode(
+            renderLambdaBodies = true,
+            renderCallArguments = true,
+            renderCallableFqNames = false,
+            renderDeclarationResolvePhase = false
+        )
 
-        object WithFqNames: RenderMode(renderLambdaBodies = true, renderCallArguments = true, renderCallableFqNames = true)
+        object WithFqNames : RenderMode(
+            renderLambdaBodies = true,
+            renderCallArguments = true,
+            renderCallableFqNames = true,
+            renderDeclarationResolvePhase = false
+        )
+
+        object WithResolvePhases : RenderMode(
+            renderLambdaBodies = true,
+            renderCallArguments = true,
+            renderCallableFqNames = false,
+            renderDeclarationResolvePhase = true
+        )
     }
 
     private val printer = Printer(builder)
@@ -206,7 +227,7 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     }
 
     private fun FirMemberDeclaration.modalityAsString(): String {
-        return modality?.name?.toLowerCase() ?: run {
+        return modality?.name?.toLowerCaseAsciiOnly() ?: run {
             if (this is FirCallableMemberDeclaration<*> && this.isOverride) {
                 "open?"
             } else {
@@ -320,9 +341,10 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     }
 
     override fun visitDeclaration(declaration: FirDeclaration) {
+        declaration.renderPhaseIfNeeded()
         print(
             when (declaration) {
-                is FirRegularClass -> declaration.classKind.name.toLowerCase().replace("_", " ")
+                is FirRegularClass -> declaration.classKind.name.toLowerCaseAsciiOnly().replace("_", " ")
                 is FirTypeAlias -> "typealias"
                 is FirSimpleFunction -> "fun"
                 is FirProperty -> {
@@ -334,6 +356,12 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
                 else -> "unknown"
             }
         )
+    }
+
+    private fun FirDeclaration.renderPhaseIfNeeded() {
+        if (mode.renderDeclarationResolvePhase) {
+            print("[${resolvePhase}] ")
+        }
     }
 
     private fun List<FirDeclaration>.renderDeclarations() {
@@ -435,6 +463,7 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
         if (constructor.isActual) {
             print("actual ")
         }
+        constructor.renderPhaseIfNeeded()
         print("constructor")
         constructor.typeParameters.renderTypeParameters()
         constructor.valueParameters.renderParameters()
@@ -501,8 +530,11 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
         anonymousInitializer.body?.renderBody()
     }
 
-    private fun FirBlock.renderBody(additionalStatements: List<FirStatement> = emptyList()) {
-        renderInBraces {
+    private fun FirBlock.renderBody(additionalStatements: List<FirStatement> = emptyList()) = when (this) {
+        is FirLazyBlock -> {
+            println(" { LAZY_BLOCK }")
+        }
+        else -> renderInBraces {
             for (statement in additionalStatements + statements) {
                 statement.accept(this@FirRenderer)
                 println()
@@ -700,10 +732,13 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     }
 
     override fun visitExpression(expression: FirExpression) {
-        expression.annotations.renderAnnotations()
+        if (expression !is FirLazyExpression) {
+            expression.annotations.renderAnnotations()
+        }
         print(
             when (expression) {
                 is FirExpressionStub -> "STUB"
+                is FirLazyExpression -> "LAZY_EXPRESSION"
                 is FirUnitExpression -> "Unit"
                 is FirElseIfTrueCondition -> "else"
                 is FirNoReceiverExpression -> ""
@@ -821,12 +856,6 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     override fun visitTypeRef(typeRef: FirTypeRef) {
         typeRef.annotations.renderAnnotations()
         visitElement(typeRef)
-    }
-
-    override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef) {
-        delegatedTypeRef.typeRef.accept(this)
-        print(" by ")
-        delegatedTypeRef.delegate?.accept(this)
     }
 
     override fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef) {
@@ -950,17 +979,13 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
     override fun visitResolvedNamedReference(resolvedNamedReference: FirResolvedNamedReference) {
         print("R|")
         val symbol = resolvedNamedReference.resolvedSymbol
-        val isFakeOverride = when (symbol) {
-            is FirNamedFunctionSymbol -> symbol.isFakeOverride
-            is FirPropertySymbol -> symbol.isFakeOverride
-            else -> false
+        val isSubstitutionOverride = (symbol.fir as? FirCallableMemberDeclaration)?.isSubstitutionOverride == true
+
+        if (isSubstitutionOverride) {
+            print("SubstitutionOverride<")
         }
 
-        if (isFakeOverride) {
-            print("FakeOverride<")
-        }
-        print(symbol.render())
-
+        print(symbol.unwrapIntersectionOverrides().render())
 
         if (resolvedNamedReference is FirResolvedCallableReference) {
             if (resolvedNamedReference.inferredTypeArguments.isNotEmpty()) {
@@ -972,7 +997,7 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
             }
         }
 
-        if (isFakeOverride) {
+        if (isSubstitutionOverride) {
             when (symbol) {
                 is FirNamedFunctionSymbol -> {
                     print(": ")
@@ -986,6 +1011,11 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
             print(">")
         }
         print("|")
+    }
+
+    private fun AbstractFirBasedSymbol<*>.unwrapIntersectionOverrides(): AbstractFirBasedSymbol<*> {
+        (this as? FirCallableSymbol<*>)?.baseForIntersectionOverride?.let { return it.unwrapIntersectionOverrides() }
+        return this
     }
 
     override fun visitResolvedCallableReference(resolvedCallableReference: FirResolvedCallableReference) {
@@ -1106,6 +1136,10 @@ class FirRenderer(builder: StringBuilder, private val mode: RenderMode = RenderM
         functionCall.calleeReference.accept(this)
         functionCall.typeArguments.renderTypeArguments()
         visitCall(functionCall)
+    }
+
+    override fun visitImplicitInvokeCall(implicitInvokeCall: FirImplicitInvokeCall) {
+        visitFunctionCall(implicitInvokeCall)
     }
 
     override fun visitComparisonExpression(comparisonExpression: FirComparisonExpression) {

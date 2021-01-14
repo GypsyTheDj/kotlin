@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.frontend.di.createContainerForLazyBodyResolve
 import org.jetbrains.kotlin.idea.caches.project.getModuleInfo
 import org.jetbrains.kotlin.idea.caches.trackers.clearInBlockModifications
 import org.jetbrains.kotlin.idea.caches.trackers.inBlockModifications
+import org.jetbrains.kotlin.idea.compiler.IdeMainFunctionDetectorFactory
 import org.jetbrains.kotlin.idea.project.IdeaModuleStructureOracle
 import org.jetbrains.kotlin.idea.project.findAnalyzerServices
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
@@ -165,6 +166,9 @@ internal class PerFileAnalysisCache(val file: KtFile, componentProvider: Compone
                 throw e
             }
         }
+        if (fileResult == null) {
+            file.clearInBlockModifications()
+        }
         return fileResult
     }
 
@@ -228,6 +232,7 @@ internal class PerFileAnalysisCache(val file: KtFile, componentProvider: Compone
             return AnalysisResult.EMPTY
         }
 
+        moduleDescriptor.assertValid()
         try {
             return KotlinResolveDataProvider.analyze(
                 project,
@@ -445,7 +450,8 @@ private object KotlinResolveDataProvider {
                 bodyResolveCache,
                 targetPlatform.findAnalyzerServices(project),
                 analyzableElement.languageVersionSettings,
-                IdeaModuleStructureOracle()
+                IdeaModuleStructureOracle(),
+                IdeMainFunctionDetectorFactory()
             ).get<LazyTopDownAnalyzer>()
 
             lazyTopDownAnalyzer.analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, listOf(analyzableElement))

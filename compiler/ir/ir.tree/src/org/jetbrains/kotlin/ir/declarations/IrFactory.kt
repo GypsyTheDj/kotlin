@@ -32,7 +32,7 @@ interface IrFactory {
         symbol: IrClassSymbol,
         name: Name,
         kind: ClassKind,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isCompanion: Boolean = false,
         isInner: Boolean = false,
@@ -50,7 +50,7 @@ interface IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrConstructorSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         returnType: IrType,
         isInline: Boolean,
         isExternal: Boolean,
@@ -70,7 +70,7 @@ interface IrFactory {
     fun createErrorDeclaration(
         startOffset: Int,
         endOffset: Int,
-        descriptor: DeclarationDescriptor,
+        descriptor: DeclarationDescriptor? = null,
     ): IrErrorDeclaration
 
     fun createField(
@@ -80,7 +80,7 @@ interface IrFactory {
         symbol: IrFieldSymbol,
         name: Name,
         type: IrType,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         isFinal: Boolean,
         isExternal: Boolean,
         isStatic: Boolean,
@@ -92,7 +92,7 @@ interface IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrSimpleFunctionSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         returnType: IrType,
         isInline: Boolean,
@@ -111,7 +111,7 @@ interface IrFactory {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         returnType: IrType,
         isInline: Boolean,
@@ -139,7 +139,7 @@ interface IrFactory {
         origin: IrDeclarationOrigin,
         symbol: IrPropertySymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isVar: Boolean,
         isConst: Boolean,
@@ -156,7 +156,7 @@ interface IrFactory {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         modality: Modality,
         isVar: Boolean,
         isConst: Boolean,
@@ -171,7 +171,7 @@ interface IrFactory {
         endOffset: Int,
         symbol: IrTypeAliasSymbol,
         name: Name,
-        visibility: Visibility,
+        visibility: DescriptorVisibility,
         expandedType: IrType,
         isActual: Boolean,
         origin: IrDeclarationOrigin,
@@ -199,6 +199,8 @@ interface IrFactory {
         varargElementType: IrType?,
         isCrossinline: Boolean,
         isNoinline: Boolean,
+        isHidden: Boolean,
+        isAssignable: Boolean
     ): IrValueParameter
 
     // Bodies

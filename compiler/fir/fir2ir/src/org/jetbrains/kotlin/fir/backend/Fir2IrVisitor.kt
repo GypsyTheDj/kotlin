@@ -8,8 +8,8 @@ package org.jetbrains.kotlin.fir.backend
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.*
-import org.jetbrains.kotlin.fir.backend.generators.AnnotationGenerator
 import org.jetbrains.kotlin.fir.backend.generators.ClassMemberGenerator
 import org.jetbrains.kotlin.fir.backend.generators.OperatorExpressionGenerator
 import org.jetbrains.kotlin.fir.declarations.*
@@ -21,17 +21,11 @@ import org.jetbrains.kotlin.fir.expressions.impl.FirStubStatement
 import org.jetbrains.kotlin.fir.expressions.impl.FirUnitExpression
 import org.jetbrains.kotlin.fir.references.FirReference
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
-import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.isIteratorNext
-import org.jetbrains.kotlin.fir.resolve.scope
 import org.jetbrains.kotlin.fir.resolve.toSymbol
-import org.jetbrains.kotlin.fir.resolve.transformers.IntegerLiteralTypeApproximationTransformer
-import org.jetbrains.kotlin.fir.scopes.impl.FirIntegerOperator
-import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirDefaultVisitor
-import org.jetbrains.kotlin.fir.visitors.transformSingle
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
@@ -41,7 +35,6 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.coerceToUnitIfNeeded
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.parentClassOrNull
@@ -49,6 +42,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.util.OperatorNameConventions
 
 class Fir2IrVisitor(
     private val converter: Fir2IrConverter,
@@ -56,13 +50,7 @@ class Fir2IrVisitor(
     private val conversionScope: Fir2IrConversionScope
 ) : Fir2IrComponents by components, FirDefaultVisitor<IrElement, Any?>(), IrGeneratorContextInterface {
 
-    private val annotationGenerator = AnnotationGenerator(this)
-
-    private val integerApproximator = IntegerLiteralTypeApproximationTransformer(
-        session.firSymbolProvider,
-        session.typeContext,
-        session
-    )
+    internal val implicitCastInserter = Fir2IrImplicitCastInserter(components, this)
 
     private val memberGenerator = ClassMemberGenerator(components, this, conversionScope)
 
@@ -70,12 +58,10 @@ class Fir2IrVisitor(
 
     private fun FirTypeRef.toIrType(): IrType = with(typeConverter) { toIrType() }
 
-    private fun ConeKotlinType.toIrType(): IrType = with(typeConverter) { toIrType() }
-
     private fun <T : IrDeclaration> applyParentFromStackTo(declaration: T): T = conversionScope.applyParentFromStackTo(declaration)
 
     override fun visitElement(element: FirElement, data: Any?): IrElement {
-        TODO("Should not be here: ${element.render()}")
+        TODO("Should not be here: ${element::class} ${element.render()}")
     }
 
     override fun visitField(field: FirField, data: Any?): IrField {
@@ -91,12 +77,8 @@ class Fir2IrVisitor(
             file.declarations.forEach {
                 it.toIrDeclaration()
             }
-
-            annotations = file.annotations.mapNotNull {
-                it.accept(this@Fir2IrVisitor, data) as? IrConstructorCall
-            }
-
-            metadata = FirMetadataSource.File(file, components.session)
+            annotationGenerator.generate(this, file)
+            metadata = FirMetadataSource.File(file)
         }
     }
 
@@ -253,6 +235,20 @@ class Fir2IrVisitor(
 
     private fun visitLocalVariable(variable: FirProperty): IrElement {
         assert(variable.isLocal)
+        val delegate = variable.delegate
+        if (delegate != null) {
+            val irProperty = declarationStorage.createIrLocalDelegatedProperty(variable, conversionScope.parentFromStack())
+            irProperty.delegate.initializer = convertToIrExpression(delegate)
+            conversionScope.withFunction(irProperty.getter) {
+                memberGenerator.convertFunctionContent(irProperty.getter, variable.getter, null)
+            }
+            irProperty.setter?.let {
+                conversionScope.withFunction(it) {
+                    memberGenerator.convertFunctionContent(it, variable.setter, null)
+                }
+            }
+            return irProperty
+        }
         val initializer = variable.initializer
         val isNextVariable = initializer is FirFunctionCall &&
                 initializer.resolvedNamedFunctionSymbol()?.callableId?.isIteratorNext() == true &&
@@ -261,7 +257,10 @@ class Fir2IrVisitor(
             variable, conversionScope.parentFromStack(), if (isNextVariable) IrDeclarationOrigin.FOR_LOOP_VARIABLE else null
         )
         if (initializer != null) {
-            irVariable.initializer = convertToIrExpression(initializer)
+            irVariable.initializer =
+                with(implicitCastInserter) {
+                    convertToIrExpression(initializer).cast(initializer, initializer.typeRef, variable.returnTypeRef)
+                }
         }
         return irVariable
     }
@@ -277,7 +276,7 @@ class Fir2IrVisitor(
     // ==================================================================================
 
     override fun visitReturnExpression(returnExpression: FirReturnExpression, data: Any?): IrElement {
-        val irTarget = conversionScope.returnTarget(returnExpression)
+        val irTarget = conversionScope.returnTarget(returnExpression, declarationStorage)
         return returnExpression.convertWithOffsets { startOffset, endOffset ->
             val result = returnExpression.result
             IrReturnImpl(
@@ -289,6 +288,8 @@ class Fir2IrVisitor(
                 },
                 convertToIrExpression(result)
             )
+        }.let {
+            returnExpression.accept(implicitCastInserter, it)
         }
     }
 
@@ -326,12 +327,7 @@ class Fir2IrVisitor(
     }
 
     override fun visitFunctionCall(functionCall: FirFunctionCall, data: Any?): IrExpression {
-        val convertibleCall = if (functionCall.toResolvedCallableSymbol()?.fir is FirIntegerOperator) {
-            functionCall.copy().transformSingle(integerApproximator, null)
-        } else {
-            functionCall
-        }
-        return convertToIrCall(functionCall = convertibleCall, annotationMode = false)
+        return convertToIrCall(functionCall = functionCall, annotationMode = false)
     }
 
     override fun visitSafeCallExpression(safeCallExpression: FirSafeCallExpression, data: Any?): IrElement {
@@ -344,14 +340,7 @@ class Fir2IrVisitor(
 
         return conversionScope.withSafeCallSubject(receiverVariable) {
             val afterNotNullCheck = safeCallExpression.regularQualifiedAccess.accept(this, data) as IrExpression
-
-            val isReceiverNullable = with(components.session.typeContext) {
-                safeCallExpression.receiver.typeRef.coneType.isNullableType()
-            }
-
-            components.createSafeCallConstruction(
-                receiverVariable, variableSymbol, afterNotNullCheck, isReceiverNullable
-            )
+            components.createSafeCallConstruction(receiverVariable, variableSymbol, afterNotNullCheck)
         }
     }
 
@@ -409,7 +398,7 @@ class Fir2IrVisitor(
                 }
             }
         } else if (boundSymbol is FirCallableSymbol) {
-            val receiverSymbol = calleeReference.toSymbol(session, classifierStorage, declarationStorage, conversionScope)
+            val receiverSymbol = calleeReference.toSymbolForCall(session, classifierStorage, declarationStorage, conversionScope)
             val receiver = (receiverSymbol?.owner as? IrSimpleFunction)?.extensionReceiverParameter
             if (receiver != null) {
                 return thisReceiverExpression.convertWithOffsets { startOffset, endOffset ->
@@ -421,80 +410,15 @@ class Fir2IrVisitor(
         return visitQualifiedAccessExpression(thisReceiverExpression, data)
     }
 
-    private fun implicitCastOrExpression(original: IrExpression, castType: IrType): IrExpression {
-        if (original.type == castType) return original
-        return IrTypeOperatorCallImpl(
-            original.startOffset,
-            original.endOffset,
-            castType,
-            IrTypeOperator.IMPLICIT_CAST,
-            castType,
-            original
-        )
-    }
-
-    private fun implicitCastOrExpression(original: IrExpression, castType: ConeKotlinType): IrExpression {
-        return implicitCastOrExpression(original, castType.toIrType())
-    }
-
-    private fun implicitCastOrExpression(original: IrExpression, castType: FirTypeRef): IrExpression {
-        return implicitCastOrExpression(original, castType.toIrType())
-    }
-
-    private fun ConeKotlinType.doesContainReferencedSymbolInScope(
-        referencedSymbol: AbstractFirBasedSymbol<*>, name: Name
-    ): Boolean {
-        val scope = scope(session, components.scopeSession) ?: return false
-        var result = false
-        val processor = { it: FirCallableSymbol<*> ->
-            if (!result && it == referencedSymbol) {
-                result = true
-            }
-        }
-        when (referencedSymbol) {
-            is FirPropertySymbol -> scope.processPropertiesByName(name, processor)
-            is FirFunctionSymbol -> scope.processFunctionsByName(name, processor)
-        }
-        return result
-    }
-
-    private fun convertToImplicitCastExpression(
-        expressionWithSmartcast: FirExpressionWithSmartcast, calleeReference: FirReference
-    ): IrExpression {
-        val value = convertToIrExpression(expressionWithSmartcast.originalExpression)
-        val castTypeRef = expressionWithSmartcast.typeRef
-        if (calleeReference !is FirResolvedNamedReference) {
-            return implicitCastOrExpression(value, castTypeRef)
-        }
-        val referencedSymbol = calleeReference.resolvedSymbol
-        if (referencedSymbol !is FirPropertySymbol && referencedSymbol !is FirFunctionSymbol) {
-            return implicitCastOrExpression(value, castTypeRef)
-        }
-
-        val originalTypeRef = expressionWithSmartcast.originalType
-        if (castTypeRef is FirResolvedTypeRef && originalTypeRef is FirResolvedTypeRef) {
-            val castType = castTypeRef.type
-            if (castType is ConeIntersectionType) {
-                val unwrappedSymbol = (referencedSymbol as? FirCallableSymbol)?.overriddenSymbol ?: referencedSymbol
-                castType.intersectedTypes.forEach {
-                    if (it.doesContainReferencedSymbolInScope(unwrappedSymbol, calleeReference.name)) {
-                        return implicitCastOrExpression(value, it)
-                    }
-                }
-            }
-        }
-        return implicitCastOrExpression(value, castTypeRef.toIrType())
-    }
-
     override fun visitExpressionWithSmartcast(expressionWithSmartcast: FirExpressionWithSmartcast, data: Any?): IrElement {
         // Generate the expression with the original type and then cast it to the smart cast type.
         val value = convertToIrExpression(expressionWithSmartcast.originalExpression)
-        return implicitCastOrExpression(value, expressionWithSmartcast.typeRef)
+        return implicitCastInserter.visitExpressionWithSmartcast(expressionWithSmartcast, value)
     }
 
     override fun visitCallableReferenceAccess(callableReferenceAccess: FirCallableReferenceAccess, data: Any?): IrElement {
         val explicitReceiverExpression = convertToIrReceiverExpression(
-            callableReferenceAccess.explicitReceiver, callableReferenceAccess.calleeReference, callableReferenceMode = true
+            callableReferenceAccess.explicitReceiver, callableReferenceAccess.calleeReference, callableReferenceAccess
         )
         return callGenerator.convertToIrCallableReference(callableReferenceAccess, explicitReceiverExpression)
     }
@@ -540,19 +464,32 @@ class Fir2IrVisitor(
                     expression.accept(this, null) as IrExpression
                 }
             }
+        }.let {
+            expression.accept(implicitCastInserter, it) as IrExpression
         }
     }
 
     private fun convertToIrReceiverExpression(
         expression: FirExpression?,
         calleeReference: FirReference,
-        callableReferenceMode: Boolean = false
+        callableReferenceAccess: FirCallableReferenceAccess? = null
     ): IrExpression? {
         return when (expression) {
             null -> null
-            is FirResolvedQualifier -> callGenerator.convertToGetObject(expression, callableReferenceMode)
-            is FirExpressionWithSmartcast -> convertToImplicitCastExpression(expression, calleeReference)
-            else -> convertToIrExpression(expression)
+            is FirResolvedQualifier -> callGenerator.convertToGetObject(expression, callableReferenceAccess)
+            is FirExpressionWithSmartcast -> implicitCastInserter.convertToImplicitCastExpression(expression, calleeReference)
+            is FirFunctionCall, is FirThisReceiverExpression, is FirCallableReferenceAccess -> convertToIrExpression(expression)
+            else -> if (expression is FirQualifiedAccessExpression && expression.explicitReceiver == null) {
+                val variableAsFunctionMode = calleeReference is FirResolvedNamedReference &&
+                        calleeReference.name != OperatorNameConventions.INVOKE &&
+                        (calleeReference.resolvedSymbol as? FirCallableSymbol)?.callableId?.callableName == OperatorNameConventions.INVOKE
+                callGenerator.convertToIrCall(
+                    expression, expression.typeRef, explicitReceiverExpression = null,
+                    variableAsFunctionMode = variableAsFunctionMode
+                )
+            } else {
+                convertToIrExpression(expression)
+            }
         }
     }
 
@@ -590,7 +527,11 @@ class Fir2IrVisitor(
                 } else {
                     emptyList()
                 }
-            ).insertImplicitCasts()
+            ).also {
+                with(implicitCastInserter) {
+                    it.insertImplicitCasts()
+                }
+            }
         }
     }
 
@@ -608,42 +549,14 @@ class Fir2IrVisitor(
                 IrCompositeImpl(
                     startOffset, endOffset, type, origin,
                     mapToIrStatements().filterNotNull()
-                ).insertImplicitCasts()
+                )
             } else {
                 IrBlockImpl(
                     startOffset, endOffset, type, origin,
                     mapToIrStatements().filterNotNull()
-                ).insertImplicitCasts()
+                )
             }
         }
-    }
-
-    private fun IrBlockBody.insertImplicitCasts(): IrBlockBody {
-        if (statements.isEmpty()) return this
-
-        statements.forEachIndexed { i, irStatement ->
-            if (irStatement !is IrErrorCallExpression && irStatement is IrExpression) {
-                statements[i] = irStatement.coerceToUnitIfNeeded(irStatement.type, irBuiltIns)
-            }
-        }
-        return this
-    }
-
-    private fun IrContainerExpression.insertImplicitCasts(): IrContainerExpression {
-        if (statements.isEmpty()) return this
-
-        val lastIndex = statements.lastIndex
-        statements.forEachIndexed { i, irStatement ->
-            if (irStatement !is IrErrorCallExpression && irStatement is IrExpression) {
-                if (i != lastIndex) {
-                    statements[i] = irStatement.coerceToUnitIfNeeded(irStatement.type, irBuiltIns)
-                } else {
-                    // TODO: for the last statement, need to cast to the return type if mismatched
-                }
-            }
-        }
-
-        return this
     }
 
     override fun visitErrorExpression(errorExpression: FirErrorExpression, data: Any?): IrElement {
@@ -674,8 +587,7 @@ class Fir2IrVisitor(
             fun irGetLhsValue(): IrGetValue =
                 IrGetValueImpl(startOffset, endOffset, irLhsVariable.type, irLhsVariable.symbol)
 
-            // TODO: replace with .coneType
-            val originalType = firLhsVariable.returnTypeRef.coneTypeUnsafe<ConeKotlinType>()
+            val originalType = firLhsVariable.returnTypeRef.coneType
             val notNullType = originalType.withNullability(ConeNullability.NOT_NULL)
             val irBranches = listOf(
                 IrBranchImpl(
@@ -692,7 +604,7 @@ class Fir2IrVisitor(
                     if (notNullType == originalType) {
                         irGetLhsValue()
                     } else {
-                        implicitCastOrExpression(
+                        implicitCastInserter.implicitCastOrExpression(
                             irGetLhsValue(),
                             firLhsVariable.returnTypeRef.resolvedTypeFromPrototype(notNullType).toIrType()
                         )
@@ -729,7 +641,7 @@ class Fir2IrVisitor(
                 val irBranches = whenExpression.branches.mapNotNullTo(mutableListOf()) { branch ->
                     branch.takeIf {
                         it.condition !is FirElseIfTrueCondition || it.result.statements.isNotEmpty()
-                    }?.toIrWhenBranch()
+                    }?.toIrWhenBranch(whenExpression.typeRef)
                 }
                 if (whenExpression.isExhaustive && whenExpression.branches.none { it.condition is FirElseIfTrueCondition }) {
                     val irResult = IrCallImpl(
@@ -751,6 +663,8 @@ class Fir2IrVisitor(
                     ) whenExpression.typeRef.toIrType() else irBuiltIns.unitType
                 )
             }
+        }.also {
+            whenExpression.accept(implicitCastInserter, it)
         }
     }
 
@@ -782,10 +696,12 @@ class Fir2IrVisitor(
         }
     }
 
-    private fun FirWhenBranch.toIrWhenBranch(): IrBranch {
+    private fun FirWhenBranch.toIrWhenBranch(whenExpressionType: FirTypeRef): IrBranch {
         return convertWithOffsets { startOffset, endOffset ->
             val condition = condition
-            val irResult = convertToIrExpression(result)
+            val irResult = with(implicitCastInserter) {
+                convertToIrExpression(result).cast(result, result.typeRef, whenExpressionType)
+            }
             if (condition is FirElseIfTrueCondition) {
                 IrElseBranchImpl(IrConstImpl.boolean(irResult.startOffset, irResult.endOffset, irBuiltIns.booleanType, true), irResult)
             } else {
@@ -815,6 +731,8 @@ class Fir2IrVisitor(
                 condition = convertToIrExpression(doWhileLoop.condition)
                 loopMap.remove(doWhileLoop)
             }
+        }.also {
+            doWhileLoop.accept(implicitCastInserter, it)
         }
     }
 
@@ -826,9 +744,12 @@ class Fir2IrVisitor(
                 loopMap[whileLoop] = this
                 label = whileLoop.label?.name
                 condition = convertToIrExpression(whileLoop.condition)
-                body = whileLoop.block.convertToIrExpressionOrBlock(origin)
+                // NB: here we have strange origin logic, made to be compatible with FE 1.0
+                body = whileLoop.block.convertToIrExpressionOrBlock(origin.takeIf { it != IrStatementOrigin.WHILE_LOOP })
                 loopMap.remove(whileLoop)
             }
+        }.also {
+            whileLoop.accept(implicitCastInserter, it)
         }
     }
 
@@ -966,7 +887,7 @@ class Fir2IrVisitor(
                 }
             }
             is FirClassReferenceExpression -> {
-                argument.classTypeRef.coneTypeSafe<ConeClassLikeType>().toIrClassSymbol()
+                (argument.classTypeRef.coneType.lowerBoundIfFlexible() as? ConeClassLikeType)?.toIrClassSymbol()
             }
             else -> null
         }

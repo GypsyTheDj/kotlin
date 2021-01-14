@@ -1,25 +1,62 @@
 val x: Int = 10
-val Int.y = this
+val Int.y get() = this
 
 // SYMBOLS:
-KtFirPropertySymbol:
+KtFirKotlinPropertySymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
   callableIdIfNonLocal: x
+  dispatchType: null
+  getter: KtFirPropertyGetterSymbol(<getter>)
+  hasBackingField: true
+  hasGetter: true
+  hasSetter: false
+  initializer: 10
+  isConst: false
   isExtension: false
+  isLateInit: false
+  isOverride: false
   isVal: true
   modality: FINAL
   name: x
   origin: SOURCE
-  receiverType: kotlin/Int
+  receiverType: null
+  setter: null
   symbolKind: TOP_LEVEL
-  type: kotlin/Int
+  visibility: PUBLIC
 
-KtFirPropertySymbol:
+KtFirPropertyGetterSymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
+  dispatchType: null
+  hasBody: true
+  isDefault: false
+  isInline: false
+  isOverride: false
+  modality: FINAL
+  origin: SOURCE
+  symbolKind: TOP_LEVEL
+  visibility: PUBLIC
+
+KtFirKotlinPropertySymbol:
+  annotatedType: [] kotlin/Int
+  annotations: []
   callableIdIfNonLocal: y
+  dispatchType: null
+  getter: KtFirPropertyGetterSymbol(<getter>)
+  hasBackingField: false
+  hasGetter: true
+  hasSetter: false
+  initializer: null
+  isConst: false
   isExtension: true
+  isLateInit: false
+  isOverride: false
   isVal: true
   modality: FINAL
   name: y
   origin: SOURCE
-  receiverType: ERROR CLASS: Unresolved this@null
+  receiverType: [] kotlin/Int
+  setter: null
   symbolKind: TOP_LEVEL
-  type: ERROR CLASS: Unresolved this@null
+  visibility: PUBLIC

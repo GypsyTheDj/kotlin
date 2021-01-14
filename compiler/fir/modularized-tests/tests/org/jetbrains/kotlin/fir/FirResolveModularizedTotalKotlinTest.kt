@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.fir
 
-import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.PsiElementFinder
 import com.intellij.psi.search.GlobalSearchScope
@@ -122,7 +121,7 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
             }
             bench.buildFiles(lightTree2Fir, allSourceFiles)
         } else {
-            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
+            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider)
             bench.buildFiles(builder, ktFiles)
         }
 
@@ -132,11 +131,11 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
         createMemoryDump(moduleData)
 
         val disambiguatedName = moduleData.disambiguatedName()
-        dumpFir(disambiguatedName, moduleData, firFiles)
-        dumpFirHtml(disambiguatedName, moduleData, firFiles)
+        dumpFir(disambiguatedName, firFiles)
+        dumpFirHtml(disambiguatedName, firFiles)
     }
 
-    private fun dumpFir(disambiguatedName: String, moduleData: ModuleData, firFiles: List<FirFile>) {
+    private fun dumpFir(disambiguatedName: String, firFiles: List<FirFile>) {
         if (!DUMP_FIR) return
         val dumpRoot = File(FIR_DUMP_PATH).resolve(disambiguatedName)
         firFiles.forEach {
@@ -151,13 +150,13 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
         val baseName = qualifiedName
         var disambiguatedName = baseName
         var counter = 1
-        while(!dumpedModules.add(disambiguatedName)) {
+        while (!dumpedModules.add(disambiguatedName)) {
             disambiguatedName = "$baseName.${counter++}"
         }
         return disambiguatedName
     }
 
-    private fun dumpFirHtml(disambiguatedName: String, moduleData: ModuleData, firFiles: List<FirFile>) {
+    private fun dumpFirHtml(disambiguatedName: String, firFiles: List<FirFile>) {
         if (!DUMP_FIR) return
         dump.module(disambiguatedName) {
             firFiles.forEach(dump::indexFile)
@@ -167,13 +166,10 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
 
     override fun processModule(moduleData: ModuleData): ProcessorAction {
         val disposable = Disposer.newDisposable()
-
-
         val configuration = createDefaultConfiguration(moduleData)
         val environment = KotlinCoreEnvironment.createForTests(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
 
-        Extensions.getArea(environment.project)
-            .getExtensionPoint(PsiElementFinder.EP_NAME)
+        PsiElementFinder.EP.getPoint(environment.project)
             .unregisterExtension(JavaElementFinder::class.java)
 
         runAnalysis(moduleData, environment)

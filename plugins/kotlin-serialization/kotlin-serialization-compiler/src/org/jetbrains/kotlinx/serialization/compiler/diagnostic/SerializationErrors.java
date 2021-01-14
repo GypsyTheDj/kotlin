@@ -14,7 +14,7 @@ import static org.jetbrains.kotlin.diagnostics.Severity.ERROR;
 import static org.jetbrains.kotlin.diagnostics.Severity.WARNING;
 
 public interface SerializationErrors {
-    DiagnosticFactory0<PsiElement> INLINE_CLASSES_NOT_SUPPORTED = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory2<PsiElement, String, String> INLINE_CLASSES_NOT_SUPPORTED = DiagnosticFactory2.create(ERROR);
     DiagnosticFactory0<PsiElement> PLUGIN_IS_NOT_ENABLED = DiagnosticFactory0.create(WARNING);
 
     DiagnosticFactory0<PsiElement> EXPLICIT_SERIALIZABLE_IS_REQUIRED = DiagnosticFactory0.create(WARNING);
@@ -25,6 +25,7 @@ public interface SerializationErrors {
     DiagnosticFactory1<KtAnnotationEntry, String> DUPLICATE_SERIAL_NAME = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, KotlinType> SERIALIZER_NOT_FOUND = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory2<PsiElement, KotlinType, KotlinType> SERIALIZER_NULLABILITY_INCOMPATIBLE = DiagnosticFactory2.create(ERROR);
+    DiagnosticFactory3<PsiElement, KotlinType, KotlinType, KotlinType> SERIALIZER_TYPE_INCOMPATIBLE = DiagnosticFactory3.create(WARNING);
     DiagnosticFactory0<PsiElement> TRANSIENT_MISSING_INITIALIZER = DiagnosticFactory0.create(ERROR);
 
     DiagnosticFactory0<PsiElement> TRANSIENT_IS_REDUNDANT = DiagnosticFactory0.create(WARNING);

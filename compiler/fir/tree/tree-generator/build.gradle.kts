@@ -23,10 +23,7 @@ dependencies {
         includeJars("trove4j", rootProject = rootProject)
     }
 
-    Platform[192].orHigher {
-        runtimeOnly(intellijCoreDep()) { includeJars("jdom") }
-    }
-    implementation(project(":kotlin-reflect"))
+    runtimeOnly(intellijCoreDep()) { includeJars("jdom") }
 }
 
 val writeCopyright by task<WriteCopyrightToFile> {

@@ -8,13 +8,13 @@ package org.jetbrains.kotlin.ir.backend.js.lower
 import org.jetbrains.kotlin.backend.common.BodyLoweringPass
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.ir.isElseBranch
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsCommonBackendContext
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
-import org.jetbrains.kotlin.ir.backend.js.utils.isPure
+import org.jetbrains.kotlin.ir.util.isPure
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -57,7 +57,7 @@ abstract class AbstractBlockDecomposerLowering(
                     val initFunction = context.irFactory.buildFun {
                         name = Name.identifier(container.name.asString() + "\$init\$")
                         returnType = container.type
-                        visibility = Visibilities.PRIVATE
+                        visibility = DescriptorVisibilities.PRIVATE
                         origin = JsIrBuilder.SYNTHESIZED_DECLARATION
                     }.apply {
                         parent = container.parent
@@ -117,10 +117,6 @@ class BlockDecomposerTransformer(
         function = declaration
 
         with(declaration) {
-            val transformedDeclarations = declarations.map { it.transform(statementTransformer, null) as IrDeclaration }
-            declarations.clear()
-            declarations.addAll(transformedDeclarations)
-
             val transformedStatements = mutableListOf<IrStatement>()
             statements.forEach {
                 val transformer = if (it === statements.last()) expressionTransformer else statementTransformer
@@ -271,13 +267,13 @@ class BlockDecomposerTransformer(
             }
         }
 
-        override fun visitSetVariable(expression: IrSetVariable): IrExpression {
+        override fun visitSetValue(expression: IrSetValue): IrExpression {
             expression.transformChildrenVoid(expressionTransformer)
 
             val composite = expression.value as? IrComposite ?: return expression
 
             return materializeLastExpression(composite) {
-                expression.run { IrSetVariableImpl(startOffset, endOffset, type, symbol, it, origin) }
+                expression.run { IrSetValueImpl(startOffset, endOffset, type, symbol, it, origin) }
             }
         }
 
@@ -474,7 +470,7 @@ class BlockDecomposerTransformer(
 
         override fun visitLoop(loop: IrLoop) = loop.asExpression(unitValue)
 
-        override fun visitSetVariable(expression: IrSetVariable) = expression.asExpression(unitValue)
+        override fun visitSetValue(expression: IrSetValue) = expression.asExpression(unitValue)
 
         override fun visitSetField(expression: IrSetField) = expression.asExpression(unitValue)
 
